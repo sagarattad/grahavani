@@ -190,14 +190,26 @@ describe("ratings in fixed phrases", () => {
   });
 
   it("a fixed phrase in a sentence naming two items, or none, is rejected", () => {
-    expect(check("Raj Yoga and Dhana Yoga are rated Moderate.").join()).toMatch(/exactly one/);
-    expect(check("It is rated Moderate.").join()).toMatch(/exactly one/);
+    expect(check("Raj Yoga and Dhana Yoga are rated Moderate.").join()).toMatch(/clearly belong to one/);
+    expect(check("It is rated Moderate.").join()).toMatch(/clearly belong to one/);
   });
 
   it("several items in one sentence: each phrase follows its own item's name", () => {
     expect(check("Raj Yoga is rated Moderate, while Ruchaka is rated Weak.")).toEqual([]);
     expect(check("Raj Yoga is rated Moderate, while Ruchaka is rated Strong.").join()).toMatch(/Ruchaka: text says "rated Strong"/);
     expect(check("Manglik Dosha has intensity: Low and Raj Yoga is rated Moderate.")).toEqual([]);
+  });
+
+  it("a rating can refer back to the item named just before (the live failures)", () => {
+    expect(check("Manglik Dosha is present. Its intensity: Low.")).toEqual([]);
+    expect(check("Manglik Dosha is mild; intensity: Low.")).toEqual([]);
+    expect(check("Raj Yoga links the 1st and 5th lords. It is rated Moderate because of combustion.")).toEqual([]);
+    expect(check("Manglik Dosha is present. Its intensity: High.").join()).toMatch(/computed intensity: Low/);
+  });
+
+  it("hyphen and space spellings are the same name", () => {
+    const f = followup.ctx; // Raipur
+    expect(validateReading({ answer: "Raj-Yoga is rated Moderate." }, f)).toEqual([]);
   });
 
   it("never presents the rating as Shadbala", () => {

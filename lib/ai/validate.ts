@@ -87,25 +87,61 @@ const KNOWN_ITEM_NAMES = [...YOGA_CHECKLIST.map((c) => c.label.en), ...Object.va
   .flatMap((n) => [n, n.replace(/ (Yoga|Dosha)$/, "")])
   .map((n) => [n.toLowerCase(), `name:${n.toLowerCase().replace(/ (yoga|dosha)$/, "")}`] as const);
 
-function checkRatings(sentence: string, ratings: NonNullable<ValidationContext["ratings"]>): string[] {
-  const phrases = [...sentence.matchAll(RATING_RE)];
-  if (!phrases.length) return [];
-  const byName = new Map([...KNOWN_ITEM_NAMES, ...ratings.flatMap((r) => r.names.map((n) => [n.toLowerCase(), r.key] as const))]);
-  const nameRe = new RegExp(`\\b(${alt(byName.keys())})\\b`, "gi");
-  const names = [...sentence.matchAll(nameRe)].map((m) => ({ at: m.index!, key: byName.get(m[1].toLowerCase().replace(/\s+/g, " "))! }));
-  const inSentence = new Set(names.map((n) => n.key));
+/** "Chandra-Mangala" and "Chandra Mangala" are the same name. */
+const normName = (s: string) => s.toLowerCase().replace(/[-\s]+/g, " ").trim();
 
-  // Each phrase belongs to the one item named since the previous phrase
-  // ("Gajakesari is rated Strong, while Vesi is rated Weak"), or else to the
-  // sentence's only item. "Raj Yoga and Dhana Yoga are rated Moderate" is ambiguous.
+/**
+ * Checks the fixed rating phrases in one text field against FACTS. Each phrase
+ * belongs to:
+ * - the one item named since the previous phrase in its sentence
+ *   ("Gajakesari is rated Strong, while Vesi is rated Weak");
+ * - else the sentence's only item ("Rated Strong, Raj Yoga…");
+ * - else the item named most recently before it in the field
+ *   ("Shani Dhaiya is running now. Its intensity: Medium").
+ * Two items before one phrase ("Raj Yoga and Dhana Yoga are rated Moderate") is
+ * ambiguous and rejected; a phrase with no item named anywhere before it too.
+ */
+function checkRatings(text: string, ratings: NonNullable<ValidationContext["ratings"]>): string[] {
+  const phrases = [...text.matchAll(RATING_RE)];
+  if (!phrases.length) return [];
+  const byName = new Map([
+    ...KNOWN_ITEM_NAMES.map(([n, key]) => [normName(n), key] as const),
+    ...ratings.flatMap((r) => r.names.map((n) => [normName(n), r.key] as const)),
+  ]);
+  const pattern = [...byName.keys()]
+    .sort((a, b) => b.length - a.length)
+    .map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/ /g, "[-\\s]+"))
+    .join("|");
+  const names = [...text.matchAll(new RegExp(`\\b(${pattern})\\b`, "gi"))].map((m) => ({ at: m.index!, key: byName.get(normName(m[1]))! }));
+  // Sentence boundaries (a semicolon does not end a sentence here).
+  const starts = [0, ...[...text.matchAll(/[.!?\n]\s*/g)].map((m) => m.index! + m[0].length)];
+  const sentenceOf = (i: number) => {
+    const start = Math.max(...starts.filter((s) => s <= i));
+    const end = Math.min(...starts.filter((s) => s > i), text.length);
+    return { start, end };
+  };
+
   const problems: string[] = [];
   let from = 0;
   for (const m of phrases) {
-    const since = new Set(names.filter((n) => n.at >= from && n.at < m.index!).map((n) => n.key));
-    from = m.index! + m[0].length;
-    const owner = since.size === 1 ? [...since][0] : since.size === 0 && inSentence.size === 1 ? [...inSentence][0] : null;
+    const at = m.index!;
+    const { start, end } = sentenceOf(at);
+    const since = new Set(names.filter((n) => n.at >= Math.max(from, start) && n.at < at).map((n) => n.key));
+    const inSentence = new Set(names.filter((n) => n.at >= start && n.at < end).map((n) => n.key));
+    const before = names.filter((n) => n.at < at);
+    from = at + m[0].length;
+    const owner =
+      since.size === 1
+        ? [...since][0]
+        : since.size > 1
+          ? null
+          : inSentence.size === 1
+            ? [...inSentence][0]
+            : inSentence.size === 0 && before.length
+              ? before[before.length - 1].key
+              : null;
     if (!owner) {
-      problems.push(`Rating "${m[0]}" must name exactly one Yoga or Dosha in its sentence`);
+      problems.push(`Rating "${m[0]}" must clearly belong to one Yoga or Dosha (name it just before the rating)`);
       continue;
     }
     const mine = ratings.filter((r) => r.key === owner);
@@ -137,9 +173,11 @@ export function validateReading(output: unknown, ctx: ValidationContext): string
     });
   }
 
+  // 0. Ratings: fixed phrases must match FACTS (checked per text field).
+  if (ctx.ratings?.length) for (const field of collectStrings(output)) problems.push(...checkRatings(field, ctx.ratings));
+
   for (const sentence of sentencesOf(collectStrings(output).join("\n"))) {
-    // 0. Ratings: fixed phrases must match FACTS; never present a rating as Shadbala.
-    if (ctx.ratings?.length) problems.push(...checkRatings(sentence, ctx.ratings));
+    // Never present a rating as Shadbala.
     if (SHADBALA_RE.test(sentence) && RATING_WORD_RE.test(sentence) && !NOT_COVERED_RE.test(sentence))
       problems.push(`"${sentence.slice(0, 80)}" presents a rating as Shadbala`);
 

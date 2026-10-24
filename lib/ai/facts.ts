@@ -29,6 +29,10 @@ const EXTRA_NAMES: Record<string, string[]> = {
   "Raj Yoga": ["Raja Yoga"],
   "Neechabhanga Raj Yoga": ["Neechabhanga Raja Yoga", "Neecha Bhanga Raj Yoga"],
   "Manglik Dosha": ["Mangal Dosha", "Kuja Dosha"],
+  "Shani Dhaiya": ["Dhaiya", "Shani's Dhaiya", "Ardhashtama Shani", "Kantaka Shani"],
+  "Sade Sati": ["Sadesati", "Sade Sati of Shani"],
+  "Kaal Sarp Dosha": ["Kaal Sarpa Dosha", "Kalsarp Dosha", "Kaal Sarpa"],
+  "Kemadruma Dosha": ["Kemadruma Yoga"],
 };
 
 /** "Dhana Yoga" may also be written "Dhana"; "Manglik Dosha" as "Manglik". */
