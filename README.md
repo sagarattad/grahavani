@@ -20,7 +20,8 @@ npm run dev                            # http://localhost:3000
 
 The `.env.example` Turnstile keys are Cloudflare's always-pass test keys.
 Without `OPENAI_API_KEY`, everything works except AI readings and questions.
-Without the Google keys, login is hidden.
+Without the Google keys, login is hidden. Set `ALLOWED_EMAILS` (with the Google keys) to make the
+whole site private: only those Google accounts can sign in, everyone else gets the sign-in page.
 
 | Command | What it does |
 |---|---|

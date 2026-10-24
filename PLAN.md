@@ -741,3 +741,9 @@ At the owner's request, readings, About texts and follow-ups are now direct: the
 - **About texts** use gpt-5.4-mini (low reasoning, about $0.01 per chart). In a side-by-side on one chart it wrote clearer texts than gpt-6-luna (low or medium) and answered in about 12 s; Gemini 3.8 Flash on the free tier took minutes or returned "high demand" errors in Oct 2026. The Gemini wiring (`lib/ai/models.ts`, `GOOGLE_API_KEY`) is kept but unused.
 - **Follow-up limits:** 10 questions per visitor per day, 20 per chart or match per day (`FOLLOWUP_LIMITS`).
 - **Tone (v7):** all rules that pushed readings toward positive or reassuring wording are removed: no required "blessings / lessons" framing or uplifting closing line, no banned karmic words, no "not certain" disclaimers, no "traditionally considered favourable" for timing. Kept as safety rules, not tone: no predictions of death, specific accidents or illnesses, infertility or widowhood; the refused-topic list; no medical / legal / financial advice; never "marry / don't marry"; no remedies.
+
+## Implementation notes (25 Oct 2026): private mode
+
+- `ALLOWED_EMAILS` (comma-separated) turns on private mode: `proxy.ts` (Next.js 16's middleware) sends every page to `/signin` and answers APIs with 401 unless the visitor is signed in with Google as one of those emails; Auth.js also refuses other accounts at sign-in (`auth.ts`, verified Google email required). Unset = open site, as before.
+- Always reachable: `/signin`, `/privacy`, `/api/auth/*`, `/api/cron/*` (protected by `CRON_SECRET`) and `/api/health`.
+- With private mode on in production, Vercel Deployment Protection can stay on "Standard Protection" (previews only), so the daily cron reaches the production domain.
