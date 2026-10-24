@@ -1,0 +1,225 @@
+// Grahavani database. Two layers:
+//  1. Shared calculation caches keyed by birth / couple (no names, no users).
+//  2. User-facing rows (names, slugs, user_id) that point at the caches.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------- Shared caches ----------
+
+model Place {
+  id              String   @id @default(cuid())
+  provider        String   @default("open-meteo")
+  providerPlaceId String   @unique @map("provider_place_id")
+  name            String
+  admin1          String?
+  admin2          String?
+  country         String?
+  countryCode     String?  @map("country_code")
+  lat             Float
+  lon             Float
+  timezone        String
+  population      Int?
+  createdAt       DateTime @default(now()) @map("created_at")
+  profiles        Profile[]
+
+  @@map("places")
+}
+
+model BirthChart {
+  id               String    @id @default(cuid())
+  birthKey         String    @unique @map("birth_key")
+  birthDate        String    @map("birth_date")
+  birthTime        String    @map("birth_time")
+  lat              Float
+  lon              Float
+  timezone         String
+  chart            Json
+  dashaCurrent     Json      @map("dasha_current")
+  dashaRefreshedAt DateTime  @default(now()) @map("dasha_refreshed_at")
+  attribution      Json
+  source           String    @default("kundlit")
+  fetchedAt        DateTime  @default(now()) @map("fetched_at")
+  manglik          ManglikResult?
+  kaalSarp         KaalSarpResult?
+  profiles         Profile[]
+  milansAsBoy      MilanResult[] @relation("boyChart")
+  milansAsGirl     MilanResult[] @relation("girlChart")
+  readings         AiReading[]
+
+  @@map("birth_charts")
+}
+
+model ManglikResult {
+  id           String     @id @default(cuid())
+  birthChartId String     @unique @map("birth_chart_id")
+  birthChart   BirthChart @relation(fields: [birthChartId], references: [id], onDelete: Cascade)
+  result       Json
+  attribution  Json
+  fetchedAt    DateTime   @default(now()) @map("fetched_at")
+  readings     AiReading[]
+
+  @@map("manglik_results")
+}
+
+model KaalSarpResult {
+  id           String     @id @default(cuid())
+  birthChartId String     @unique @map("birth_chart_id")
+  birthChart   BirthChart @relation(fields: [birthChartId], references: [id], onDelete: Cascade)
+  result       Json
+  attribution  Json
+  fetchedAt    DateTime   @default(now()) @map("fetched_at")
+
+  @@map("kaal_sarp_results")
+}
+
+model MilanResult {
+  id          String     @id @default(cuid())
+  pairKey     String     @unique @map("pair_key")
+  boyChartId  String     @map("boy_chart_id")
+  girlChartId String     @map("girl_chart_id")
+  boyChart    BirthChart @relation("boyChart", fields: [boyChartId], references: [id], onDelete: Cascade)
+  girlChart   BirthChart @relation("girlChart", fields: [girlChartId], references: [id], onDelete: Cascade)
+  result      Json
+  attribution Json
+  fetchedAt   DateTime   @default(now()) @map("fetched_at")
+  matches     Match[]
+  readings    AiReading[]
+
+  @@map("milan_results")
+}
+
+model AiReading {
+  id              String         @id @default(cuid())
+  cacheKey        String         @unique @map("cache_key")
+  kind            String // kundli | milan | manglik
+  factsHash       String         @map("facts_hash")
+  language        String
+  promptVersion   String         @map("prompt_version")
+  model           String
+  output          Json
+  inputTokens     Int            @default(0) @map("input_tokens")
+  outputTokens    Int            @default(0) @map("output_tokens")
+  estCostUsd      Float          @default(0) @map("est_cost_usd")
+  birthChartId    String?        @map("birth_chart_id")
+  birthChart      BirthChart?    @relation(fields: [birthChartId], references: [id], onDelete: Cascade)
+  manglikResultId String?        @map("manglik_result_id")
+  manglikResult   ManglikResult? @relation(fields: [manglikResultId], references: [id], onDelete: Cascade)
+  milanResultId   String?        @map("milan_result_id")
+  milanResult     MilanResult?   @relation(fields: [milanResultId], references: [id], onDelete: Cascade)
+  createdAt       DateTime       @default(now()) @map("created_at")
+
+  @@map("ai_readings")
+}
+
+// ---------- User-facing ----------
+
+model User {
+  id        String    @id @default(cuid())
+  googleSub String    @unique @map("google_sub")
+  email     String?
+  name      String?
+  createdAt DateTime  @default(now()) @map("created_at")
+  profiles  Profile[]
+  matches   Match[]
+
+  @@map("users")
+}
+
+model Profile {
+  id           String     @id @default(cuid())
+  slug         String     @unique
+  userId       String?    @map("user_id")
+  user         User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
+  name         String
+  gender       String // male | female
+  birthDate    String     @map("birth_date")
+  birthTime    String     @map("birth_time")
+  placeLabel   String     @map("place_label")
+  placeId      String?    @map("place_id")
+  place        Place?     @relation(fields: [placeId], references: [id], onDelete: SetNull)
+  lat          Float
+  lon          Float
+  timezone     String
+  placeEdited  Boolean    @default(false) @map("place_edited")
+  birthChartId String     @map("birth_chart_id")
+  birthChart   BirthChart @relation(fields: [birthChartId], references: [id])
+  createdVia   String     @map("created_via") // kundli | manglik | milan
+  lastViewedAt DateTime   @default(now()) @map("last_viewed_at")
+  createdAt    DateTime   @default(now()) @map("created_at")
+  matchesAsBoy  Match[]   @relation("boyProfile")
+  matchesAsGirl Match[]   @relation("girlProfile")
+
+  @@index([userId])
+  @@index([lastViewedAt])
+  @@map("profiles")
+}
+
+model Match {
+  id            String      @id @default(cuid())
+  slug          String      @unique
+  userId        String?     @map("user_id")
+  user          User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  boyProfileId  String      @map("boy_profile_id")
+  girlProfileId String      @map("girl_profile_id")
+  boyProfile    Profile     @relation("boyProfile", fields: [boyProfileId], references: [id], onDelete: Cascade)
+  girlProfile   Profile     @relation("girlProfile", fields: [girlProfileId], references: [id], onDelete: Cascade)
+  milanResultId String      @map("milan_result_id")
+  milanResult   MilanResult @relation(fields: [milanResultId], references: [id])
+  lastViewedAt  DateTime    @default(now()) @map("last_viewed_at")
+  createdAt     DateTime    @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([lastViewedAt])
+  @@map("matches")
+}
+
+model Followup {
+  id         String   @id @default(cuid())
+  kind       String
+  targetSlug String   @map("target_slug")
+  question   String
+  answer     Json
+  userId     String?  @map("user_id")
+  ipHash     String   @map("ip_hash")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([ipHash, createdAt])
+  @@index([targetSlug, createdAt])
+  @@map("followups")
+}
+
+// ---------- Limits and usage ----------
+
+model RateLimit {
+  bucket      String
+  windowStart DateTime @map("window_start")
+  count       Int      @default(0)
+
+  @@id([bucket, windowStart])
+  @@map("rate_limits")
+}
+
+model ProviderCooldown {
+  endpoint     String   @id
+  blockedUntil DateTime @map("blocked_until")
+
+  @@map("provider_cooldowns")
+}
+
+model UsageMonthly {
+  month        String @id // "2026-10"
+  aiRequests   Int    @default(0) @map("ai_requests")
+  inputTokens  Int    @default(0) @map("input_tokens")
+  outputTokens Int    @default(0) @map("output_tokens")
+  estCostUsd   Float  @default(0) @map("est_cost_usd")
+  kundlitCalls Int    @default(0) @map("kundlit_calls")
+
+  @@map("usage_monthly")
+}

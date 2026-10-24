@@ -1,0 +1,13 @@
+# Backup keep-alive: the free Supabase project pauses after 7 days without
+# activity. The daily Vercel cron is the main ping; this is a weekly backup.
+# Set the repository variable SITE_URL (Settings → Secrets and variables → Actions → Variables).
+name: keep-alive
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - run: curl -fsS "${{ vars.SITE_URL }}/api/health"

@@ -1,0 +1,46 @@
+{
+  "name": "grahavani",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "prisma generate && next build",
+    "start": "next start",
+    "lint": "eslint",
+    "test": "vitest run",
+    "postinstall": "prisma generate",
+    "db:migrate": "prisma migrate deploy",
+    "kundlit:smoke": "node --env-file=.env scripts/kundlit-smoke.mjs"
+  },
+  "dependencies": {
+    "@ai-sdk/google": "4.0.102",
+    "@ai-sdk/openai": "^4.0.99",
+    "@ai-sdk/react": "^4.0.152",
+    "@marsidev/react-turnstile": "^1.6.3",
+    "@prisma/adapter-pg": "^7.10.1",
+    "@prisma/client": "^7.10.1",
+    "@react-pdf/renderer": "^4.9.0",
+    "ai": "^7.0.148",
+    "dotenv": "^18.0.8",
+    "next": "16.4.2",
+    "next-auth": "^5.0.0-beta.32",
+    "pg": "^8.23.1",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "server-only": "^0.0.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@tailwindcss/turbopack": "^4",
+    "@types/node": "^24.19.2",
+    "@types/pg": "^8.23.1",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.4.2",
+    "prisma": "^7.10.1",
+    "tailwindcss": "^4",
+    "typescript": "^5",
+    "vitest": "^5.0.5"
+  }
+}

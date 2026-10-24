@@ -1,0 +1,69 @@
+{
+  "app": {
+    "name": "Grahavani",
+    "tagline": "Kundli, Gun Milan and Manglik Dosha — free, in plain language.",
+    "disclaimer": "For traditional and cultural guidance only. Not a substitute for medical, legal or financial advice."
+  },
+  "nav": {
+    "home": "Home",
+    "myCharts": "My charts",
+    "login": "Log in with Google",
+    "logout": "Log out",
+    "privacy": "Privacy",
+    "about": "About"
+  },
+  "home": {
+    "kundliTitle": "Kundli",
+    "kundliText": "Your birth chart: Lagna and Navamsa charts, planets, Dasha periods and Yogas.",
+    "milanTitle": "Kundli Milan",
+    "milanText": "Ashtakoot Gun Milan for a couple: score out of 36, all 8 koots and doshas.",
+    "manglikTitle": "Manglik Dosha check",
+    "manglikText": "Whether Manglik Dosha is present, how strong, and any cancellations."
+  },
+  "form": {
+    "name": "Name",
+    "gender": "Gender",
+    "male": "Male",
+    "female": "Female",
+    "birthDate": "Birth date",
+    "birthTime": "Birth time",
+    "birthTimeHelp": "Required. Check the birth certificate or hospital record — even a few minutes matter.",
+    "birthPlace": "Birth place",
+    "placeHint": "City, State, India",
+    "placeSearching": "Searching…",
+    "placeNone": "No places found. Try the nearest city.",
+    "wrongPlace": "Wrong place? Edit",
+    "pickPlace": "Please pick the birth place from the list.",
+    "submitKundli": "Make Kundli",
+    "submitManglik": "Check Manglik Dosha",
+    "submitMilan": "Match Kundlis",
+    "groom": "Groom",
+    "bride": "Bride",
+    "calculating": "Calculating…",
+    "busyRetry": "Many people are calculating right now. Retrying in {seconds} s…"
+  },
+  "result": {
+    "share": "Share",
+    "copyLink": "Copy link",
+    "copied": "Link copied",
+    "whatsapp": "WhatsApp",
+    "shareWarning": "Anyone with this link can see these birth details.",
+    "downloadPdf": "Download PDF",
+    "pdfNote": "The PDF includes the AI reading if one has been generated.",
+    "delete": "Delete",
+    "deleteConfirm": "Delete this permanently? The link will stop working.",
+    "save": "Save to My charts",
+    "saved": "Saved",
+    "accuracyNote": "Birth time accuracy matters",
+    "getReading": "Get reading",
+    "readingIntro": "A plain-language explanation of the computed results above.",
+    "checking": "checking…",
+    "rechecking": "Re-checking the explanation…",
+    "readingFailed": "We couldn't generate a reliable explanation right now. All computed data above is accurate from Kundlit.",
+    "askTitle": "Ask about this chart",
+    "askPlaceholder": "e.g. What does my current Dasha mean for studies?",
+    "ask": "Ask",
+    "remaining": "{count} questions left today",
+    "noAnswer": "We couldn't answer that from the chart data. Try asking differently."
+  }
+}
