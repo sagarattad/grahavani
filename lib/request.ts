@@ -2,6 +2,7 @@ import "server-only";
 import { headers } from "next/headers";
 import { hashIp } from "./ids";
 import { allow } from "./rateLimit";
+import { loginRequired } from "./access";
 
 export async function clientIpHash(): Promise<string> {
   const h = await headers();
@@ -9,8 +10,13 @@ export async function clientIpHash(): Promise<string> {
   return hashIp(ip);
 }
 
-/** Verifies a Cloudflare Turnstile token on the server. */
+/**
+ * Verifies a Cloudflare Turnstile token on the server. Without a secret key the
+ * check is skipped, but only in private mode (every visitor is a signed-in,
+ * allowed account) or in local development; a public site must have real keys.
+ */
 export async function verifyTurnstile(token: string | undefined | null): Promise<boolean> {
+  if (!process.env.TURNSTILE_SECRET_KEY) return loginRequired() || process.env.NODE_ENV !== "production";
   if (!token) return false;
   const body = new URLSearchParams({ secret: process.env.TURNSTILE_SECRET_KEY ?? "", response: token });
   try {

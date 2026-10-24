@@ -18,7 +18,8 @@ npx prisma migrate deploy              # creates the tables (never `migrate dev`
 npm run dev                            # http://localhost:3000
 ```
 
-The `.env.example` Turnstile keys are Cloudflare's always-pass test keys.
+The `.env.example` Turnstile keys are Cloudflare's always-pass test keys. Leave both Turnstile keys empty
+in private mode (or locally) to hide the widget; a public production site refuses requests without them.
 Without `OPENAI_API_KEY`, everything works except AI readings and questions.
 Without the Google keys, login is hidden. Set `ALLOWED_EMAILS` (with the Google keys) to make the
 whole site private: only those Google accounts can sign in, everyone else gets the sign-in page.

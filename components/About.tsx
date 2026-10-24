@@ -1,6 +1,7 @@
 "use client";
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { Turnstile, type TurnstileInstance } from "@marsidev/react-turnstile";
+import { NO_TURNSTILE_TOKEN, TURNSTILE_ON } from "./TurnstileBox";
 
 type State = "idle" | "loading" | "error";
 type Ctx = { texts: Record<string, string> | null; state: State; error: string | null; load: () => void; retry: () => void };
@@ -54,6 +55,7 @@ export function AboutProvider({ type, slug, children }: { type: "kundli" | "mila
     busy.current = true;
     setState("loading");
     setError(null);
+    if (!TURNSTILE_ON) return void post(NO_TURNSTILE_TOKEN);
     turnstile.current?.execute();
   }
 
@@ -66,19 +68,21 @@ export function AboutProvider({ type, slug, children }: { type: "kundli" | "mila
   return (
     <AboutContext.Provider value={{ texts, state, error, load, retry }}>
       {children}
-      <div className="h-0 overflow-visible">
-        <Turnstile
-          ref={turnstile}
-          siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ?? ""}
-          options={{ execution: "execute", appearance: "interaction-only", size: "flexible" }}
-          onSuccess={post}
-          onError={() => {
-            busy.current = false;
-            setError("The human check failed. Please try again.");
-            setState("error");
-          }}
-        />
-      </div>
+      {TURNSTILE_ON && (
+        <div className="h-0 overflow-visible">
+          <Turnstile
+            ref={turnstile}
+            siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ?? ""}
+            options={{ execution: "execute", appearance: "interaction-only", size: "flexible" }}
+            onSuccess={post}
+            onError={() => {
+              busy.current = false;
+              setError("The human check failed. Please try again.");
+              setState("error");
+            }}
+          />
+        </div>
+      )}
     </AboutContext.Provider>
   );
 }
