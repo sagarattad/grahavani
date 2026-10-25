@@ -60,7 +60,8 @@ export function aboutItemsForChart(chart: Chart, extras: { manglik: Manglik | nu
       kind: "dosha",
       status: c.statusLabel,
       details: [
-        ...c.details.filter((d) => !d.startsWith("Cancellation: ")),
+        // About texts carry no dates, so dated transit notes stay out.
+        ...c.details.filter((d) => !d.startsWith("Cancellation: ") && !d.startsWith("Transiting Shani over")),
         // Manglik: say where Mangal is, so the text can explain it in plain words.
         ...(c.key === "manglik" ? mangalPlacement(chart) : []),
         // Transit doshas: name the running phase (never its dates).

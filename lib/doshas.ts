@@ -8,9 +8,12 @@ import { dateOnly } from "./format";
 import { activationWindows, type Window } from "./dasha";
 import { computeManglik, INTENSITY_LABEL } from "./astro/manglik";
 import { kemadruma, ord } from "./astro/rules";
-import { dhaiyaRanges, sadeSatiRanges, type PhaseRange } from "./astro/transits";
+import { dhaiyaRanges, sadeSatiRanges, saturnOverNatal, type PhaseRange } from "./astro/transits";
+import { functionalNature } from "./astro/functional";
+import { chartStrengths } from "./astro/planet-strength";
+import { dignityFact } from "./astro/relations";
 import type { Chart, KaalSarp, Manglik } from "./kundlit-schemas";
-import { rateDhaiya, rateKaalSarp, rateKemadruma, rateManglik, rateSadeSati, type DoshaLevel, type Rating } from "./strength";
+import { rateKaalSarp, rateKemadruma, rateManglik, type DoshaLevel, type Rating } from "./strength";
 
 export type DateRange = PhaseRange;
 
@@ -83,7 +86,7 @@ export function manglikCard(chart: Chart, asOf: string): DoshaCard {
           ]),
     ],
     // A cancelled dosha has no "felt in" periods.
-    windows: status === "present" ? activationWindows(["Mars"], chart.vimshottari.timeline, asOf, 3) : [],
+    windows: status === "present" ? activationWindows(["Mars"], chart.vimshottari.timeline, asOf, Infinity) : [],
     ranges: [],
     rating: rateManglik(m),
   });
@@ -95,7 +98,7 @@ export function kaalSarpCard(k: KaalSarp | null | undefined, chart: Chart, asOf:
     status: k.present ? "present" : "absent",
     statusLabel: k.present ? `Present — ${k.type ?? "type not given"} (${k.full_or_partial})` : "Not present",
     details: [k.explanation, ...(k.present && k.affected_houses.length ? [`Bhavas involved: ${k.affected_houses.join(", ")}`] : [])],
-    windows: k.present ? activationWindows(["Rahu", "Ketu"], chart.vimshottari.timeline, asOf, 3) : [],
+    windows: k.present ? activationWindows(["Rahu", "Ketu"], chart.vimshottari.timeline, asOf, Infinity) : [],
     ranges: [],
     rating: rateKaalSarp(k),
   });
@@ -109,10 +112,30 @@ export function kemadrumaCard(chart: Chart, asOf: string): DoshaCard {
     status,
     statusLabel: status === "absent" ? "Not formed" : status === "cancelled" ? "Formed but cancelled" : "Formed",
     details: status === "absent" ? [`Not formed: ${k.why}`] : [`Formed: ${k.why}`, ...k.cancellations.map((c) => `Cancellation: ${c}`)],
-    windows: status === "present" ? activationWindows(["Moon"], chart.vimshottari.timeline, asOf, 3) : [],
+    windows: status === "present" ? activationWindows(["Moon"], chart.vimshottari.timeline, asOf, Infinity) : [],
     ranges: [],
     rating: rateKemadruma(status !== "absent", k.cancellations),
   });
+}
+
+/**
+ * Natal Saturn as Sade Sati and Dhaiya are read through it: functional role
+ * for the Lagna, dignity and combustion. No intensity is derived from the
+ * phase alone.
+ */
+function natalSaturnLines(chart: Chart): string[] {
+  const role = functionalNature(chart.lagna.sign_num).roles.Saturn;
+  const sat = chart.grahas.find((g) => g.name === "Saturn")!;
+  const d = chartStrengths(chart).get("Saturn")!.dignity!;
+  const nature = role.nature === "malefic" ? "functional malefic" : role.nature === "benefic" ? "functional benefic" : role.nature === "yogakaraka" ? "yogakaraka" : "functionally neutral";
+  return [`Natal Shani: lord of ${role.houses.map(ord).join(" and ")} (${nature}), in ${sat.sign}, ${dignityFact(d)}${sat.combust ? ", combust" : ""}`];
+}
+
+/** "Transiting Shani over natal Shani and Chandra (Meena): 29 Mar 2025 – 3 Jun 2027". */
+function overNatalLines(chart: Chart, asOf: string): string[] {
+  return saturnOverNatal(chart, asOf).map(
+    (o) => `Transiting Shani over natal ${o.over.map((n) => (n === "Saturn" ? "Shani" : "Chandra")).join(" and ")} (${rashi(o.sign)}): ${dateOnly(o.start)} – ${dateOnly(o.end)}`,
+  );
 }
 
 /** Sade Sati from Saturn's locally computed transits (lib/astro/transits.ts), over the current and next Mahadasha. */
@@ -123,11 +146,10 @@ export function sadeSatiCard(chart: Chart, asOf: string): DoshaCard {
   return card("sadeSati", {
     status,
     statusLabel: running ? `Running now — ${running.label}` : status === "upcoming" ? `Not running now — next from ${dateOnly(ranges[0].start)}` : "Not running",
-    details: [],
+    details: [...natalSaturnLines(chart), ...overNatalLines(chart, asOf)],
     windows: [],
     ranges,
     asOf,
-    rating: rateSadeSati(running?.label ?? null),
   });
 }
 
@@ -138,11 +160,10 @@ export function dhaiyaCard(chart: Chart, asOf: string): DoshaCard {
   return card("dhaiya", {
     status,
     statusLabel: status === "running" ? "Running now" : status === "upcoming" ? `Not running now — next from ${dateOnly(ranges[0].start)}` : "Not running",
-    details: [],
+    details: natalSaturnLines(chart),
     windows: [],
     ranges,
     asOf,
-    rating: rateDhaiya(status === "running"),
   });
 }
 

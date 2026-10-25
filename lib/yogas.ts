@@ -1,12 +1,13 @@
 // Groups Kundlit's yoga list (one entry per combination) into one item per
 // yoga, attaches Bhanga (cancellation) entries, and builds the checklist.
-import { DOSHA_YOGA_IDS, YOGA_CHECKLIST, humanize, yogaCategory } from "./glossary";
+import { DOSHA_YOGA_IDS, YOGA_CHECKLIST, graha, humanize, yogaCategory } from "./glossary";
 import { activationWindows, type Window } from "./dasha";
 import type { Chart, Yoga } from "./kundlit-schemas";
 import { rateYoga, type Rating, type YogaLevel } from "./strength";
 import { chartStrengths } from "./astro/planet-strength";
-import { adhi, dhana, neechaBhanga, viparita } from "./astro/rules";
+import { SEVEN_HOUSE_AKRITI_KEYS, adhi, budhaditya, dhana, neechaBhanga, sevenHouseAkriti, viparita } from "./astro/rules";
 import { functionalNature } from "./astro/functional";
+import { SEVEN } from "./astro/relations";
 
 export type YogaItem = {
   key: string;
@@ -24,7 +25,9 @@ export type YogaItem = {
 
 const BHANGA = "yoga.bhanga.";
 // Detected by Grahavani's own rules (lib/astro/rules.ts); Kundlit's versions are dropped.
-const REPLACED = new Set(["yoga.dhana", "yoga.neechabhanga", "yoga.kemadruma"]);
+// Kundlit forms the seven-house akriti yogas from "all 7 within 7 consecutive houses";
+// Grahavani requires each of the seven houses to be occupied.
+const REPLACED = new Set(["yoga.dhana", "yoga.neechabhanga", "yoga.kemadruma", "yoga.budhaditya", ...SEVEN_HOUSE_AKRITI_KEYS]);
 
 /**
  * Kundlit's rule id. Charts cached before rule ids were stored only have a
@@ -93,7 +96,8 @@ export function groupYogas(chart: Chart, asOf: string): YogaItem[] {
   const { timeline } = chart.vimshottari;
   const strengths = chartStrengths(chart);
   for (const g of groups.values()) {
-    if (!g.nabhasa) g.windows = activationWindows(g.participants, timeline, asOf, 3);
+    // Every period of the current and next Mahadasha; displays say "and N more" when they shorten the list.
+    if (!g.nabhasa) g.windows = activationWindows(g.participants, timeline, asOf, Infinity);
     const special = own.find((o) => o.item === g);
     g.rating = special?.rating ?? rateYoga(g, chart, strengths);
     if (special?.capModerate && g.rating.level === "Strong") {
@@ -105,29 +109,49 @@ export function groupYogas(chart: Chart, asOf: string): YogaItem[] {
   return [...groups.values()].sort((a, b) => (order.get(a.key) ?? 99) - (order.get(b.key) ?? 99));
 }
 
-export type SharedLink = { planets: string[]; yogas: string[] };
+export type SharedLink = { planets: string[]; yogas: string[]; placement?: { planet: string; sign: string } };
+
+/** "Harsha, Anapha and Vasi rest on the same placement (Guru in Kumbha): read them as one support, not as separate strengths." */
+export function sharedLinkText(l: SharedLink): string {
+  const names = l.yogas.length > 2 ? `${l.yogas.slice(0, -1).join(", ")} and ${l.yogas.at(-1)}` : l.yogas.join(" and ");
+  const what = l.placement ? `placement (${graha(l.placement.planet)} in ${l.placement.sign})` : `${l.planets.map(graha).join("–")} link`;
+  return `${names} rest on the same ${what}: read them as one support, not as separate strengths.`;
+}
 
 /**
- * Present yogas that rest on the same set of planets (e.g. Gajakesari and Raj
- * Yoga both from Moon–Jupiter), so they are read as one support, not several.
- * The set is the rated combination's planets; Chandra yogas (Gajakesari, Adhi,
- * Sunapha, …) are formed from the Moon, so the Moon is always in their set.
- * Nabhasa (whole-chart pattern) yogas are left out.
+ * Present yogas that rest on the same support, read as one, not several:
+ * - yogas sharing a planet pair (Gajakesari and Raj Yoga from Moon–Jupiter;
+ *   Chandra yogas always count the Moon, being formed from it);
+ * - yogas resting on one and the same planet's placement (Harsha, Anapha
+ *   and Vasi all from Jupiter in Kumbha).
+ * Each yoga's set is its rated combination's planets. Nabhasa (whole-chart
+ * pattern) yogas and unrated items such as Neecha Bhanga are left out.
  */
-export function sharedLinks(present: YogaItem[]): SharedLink[] {
-  const groups = new Map<string, SharedLink>();
-  for (const y of present) {
-    if (y.nabhasa) continue;
-    const base = y.rating.basis ?? y.participants;
-    const withMoon = [...new Set([...base, ...(y.category === "Chandra yoga" ? ["Moon"] : [])])];
-    const planets = withMoon.filter((p) => p !== "Rahu" && p !== "Ketu").sort();
-    if (planets.length < 2) continue;
-    const key = planets.join("+");
-    const g = groups.get(key) ?? { planets, yogas: [] };
-    g.yogas.push(y.name);
-    groups.set(key, g);
-  }
-  return [...groups.values()].filter((g) => g.yogas.length > 1);
+export function sharedLinks(present: YogaItem[], chart?: Chart): SharedLink[] {
+  const nodes = (ps: string[]) => ps.filter((p) => p !== "Rahu" && p !== "Ketu");
+  const ys = present
+    .filter((y) => !y.nabhasa && y.rating.level) // unrated items (Neecha Bhanga itself, Nabhasa) are not supports
+    .map((y) => {
+      const core = nodes(y.rating.basis ?? y.participants);
+      return { y, core, set: [...new Set([...core, ...(y.category === "Chandra yoga" ? ["Moon"] : [])])] };
+    })
+    .filter((x) => x.core.length > 0);
+  const linked = (a: (typeof ys)[number], b: (typeof ys)[number]) =>
+    a.set.filter((p) => b.set.includes(p)).length >= 2 || (a.core.length === 1 && b.core.length === 1 && a.core[0] === b.core[0]);
+  // Union of linked yogas.
+  const group = ys.map((_, i) => i);
+  const find = (i: number): number => (group[i] === i ? i : (group[i] = find(group[i])));
+  for (let i = 0; i < ys.length; i++) for (let j = i + 1; j < ys.length; j++) if (linked(ys[i], ys[j])) group[find(i)] = find(j);
+  const out = new Map<number, (typeof ys)[number][]>();
+  ys.forEach((x, i) => out.set(find(i), [...(out.get(find(i)) ?? []), x]));
+  return [...out.values()]
+    .filter((g) => g.length > 1)
+    .map((g) => {
+      const common = g.map((x) => x.set).reduce((a, b) => a.filter((p) => b.includes(p)));
+      const planets = (common.length ? common : g[0].core).sort();
+      const single = planets.length === 1 && chart ? chart.grahas.find((x) => x.name === planets[0]) : undefined;
+      return { planets, yogas: g.map((x) => x.y.name), ...(single ? { placement: { planet: planets[0], sign: single.sign } } : {}) };
+    });
 }
 
 /** Present yogas (grouped) plus the checklist yogas that are not formed. */
@@ -197,6 +221,13 @@ export function grahavaniYogas(chart: Chart): OwnYoga[] {
   }
   const links = dhana(chart);
   if (links.length) out.push({ item: item("yoga.dhana", "Dhana yoga", links.map((l) => ({ claim: l.how, participants: [l.a, l.b] }))) });
+  const ba = budhaditya(chart);
+  if (ba) out.push({ item: item("yoga.budhaditya", "Surya yoga", [{ claim: `Surya and Budh together in ${ba.sign}`, participants: ["Sun", "Mercury"] }]) });
+  const ak = sevenHouseAkriti(chart);
+  if (ak) {
+    const it = item(ak.key, "Nabhasa yoga", [{ claim: `All seven planets in seven consecutive houses, from the ${ak.startHouse}th`, participants: [...SEVEN] }]);
+    out.push({ item: { ...it, name: ak.name, nabhasa: true } });
+  }
   const a = adhi(chart);
   if (a.state !== "not formed") {
     const claim = `${a.state === "full" ? "Full" : "Partial"}: ${a.planets.map((p) => `${p.name} ${p.from}th from the Moon`).join(", ")}`;

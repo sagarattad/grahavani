@@ -16,8 +16,8 @@ import {
 import { birthDateTime, dashaBalanceText, dateOnly, dms, points } from "../format";
 import { nearNakshatraBoundary, nearSignBoundary } from "../accuracy";
 import { MANGLIK_CHECKS, comparedText, doshaState, manglikCombined, manglikStatus, sortKoots } from "../summaries";
-import { sharedLinks, yogaChecklist } from "../yogas";
-import { windowText } from "../periods";
+import { sharedLinkText, sharedLinks, yogaChecklist } from "../yogas";
+import { windowText, windowsText } from "../periods";
 import { rangeText, type DoshaCard } from "../doshas";
 import { ABOUT_DOSHA_STATUSES, type AboutTexts } from "../ai/about";
 import { PARTIAL_POINTS_NOTE, RATING_NOTE, rateKootDosha, type Rating } from "../strength";
@@ -404,9 +404,9 @@ function PdfYogas({ chart, asOf, about }: { chart: Chart; asOf: string; about?: 
   return (
     <Section title="Yoga (planetary combinations)">
       {present.length === 0 && <Text style={s.muted}>No yogas were reported for this chart.</Text>}
-      {sharedLinks(present).map((l) => (
-        <Text key={l.planets.join("+")} style={[s.small, { color: C.warn, marginBottom: 4 }]}>
-          {l.yogas.join(", ")} rest on the same {l.planets.map(graha).join("–")} link: read them as one support, not as separate strengths.
+      {sharedLinks(present, chart).map((l) => (
+        <Text key={l.yogas.join("+")} style={[s.small, { color: C.warn, marginBottom: 4 }]}>
+          {sharedLinkText(l)}
         </Text>
       ))}
       {present.map((y) => (
@@ -431,7 +431,7 @@ function PdfYogas({ chart, asOf, about }: { chart: Chart; asOf: string; about?: 
           ))}
           <Text style={s.small}>
             When active:{" "}
-            {y.nabhasa ? "effective throughout life (Nabhasa yoga)" : y.windows.length ? y.windows.map(windowText).join("; ") : "no upcoming period of its grahas"}
+            {y.nabhasa ? "effective throughout life (Nabhasa yoga)" : y.windows.length ? windowsText(y.windows) : "no upcoming period of its grahas"}
           </Text>
           <RatingText rating={y.rating} label="Grahavani's classical rating: " />
           {about?.[y.key] && <AboutText text={about[y.key]} />}
@@ -471,7 +471,7 @@ function PdfDoshas({ title, cards, about }: { title: string; cards: DoshaCard[];
               • {latin(d)}
             </Text>
           ))}
-          {c.windows.length > 0 && <Text style={s.small}>Traditionally felt in: {c.windows.map(windowText).join("; ")}</Text>}
+          {c.windows.length > 0 && <Text style={s.small}>Traditionally felt in: {windowsText(c.windows)}</Text>}
           {c.ranges.map((r) => (
             <Text key={r.label + r.start} style={s.small}>
               {latin(rangeText(r))}
@@ -509,7 +509,12 @@ function PdfMarriageCareer({ chart, asOf }: { chart: Chart; asOf: string }) {
   return (
     <Section title="Marriage and career factors (D9 / D10)">
       {bt && (bt.sensitive.d1 || bt.sensitive.d9) && (
-        <Text style={[s.small, { color: C.warn }]}>{[...bt.notesBy.d1, ...bt.notesBy.d9].join(" ")} D9-based statements are sensitive to the exact birth time.</Text>
+        <Text style={[s.small, { color: C.warn }]}>
+          {[...bt.notesBy.d1, ...bt.notesBy.d9].join(" ")}{" "}
+          {bt.uninterpretable.d9
+            ? "The D9 is shown but not interpreted: its Lagna changes within 2 minutes of the birth time."
+            : "Claims that depend on the D9 Lagna (its houses, the 7th and its lord) are tentative; planets' own D9 signs are firm."}
+        </Text>
       )}
       <KeyValues
         rows={[
@@ -522,7 +527,14 @@ function PdfMarriageCareer({ chart, asOf }: { chart: Chart; asOf: string }) {
           ["Upapada Lagna", `${rashi(m.upapada.sign)} (lord ${graha(m.upapada.lord)})`],
           ...(d10
             ? ([
-                ...(bt?.sensitive.d10 ? [["Birth time (D10)", `${bt.notesBy.d10.join(" ")} D10-based statements are sensitive to the exact birth time.`]] : []),
+                ...(bt?.sensitive.d10
+                  ? [
+                      [
+                        "Birth time (D10)",
+                        `${bt.notesBy.d10.join(" ")} ${bt.uninterpretable.d10 ? "The D10 is shown but not interpreted: its Lagna changes within 2 minutes of the birth time." : "Claims that depend on the D10 Lagna (its houses, the 10th and its lord) are tentative; planets' own D10 signs are firm."}`,
+                      ],
+                    ]
+                  : []),
                 ["D10 Lagna", rashi(d10.lagnaSign)],
                 ["D10 10th and its lord", `${rashi(d10.tenthSign)}, lord ${graha(d10.tenthLord)}`],
                 ["Key planets in D10", d10.planets.map((p) => `${graha(p.name)} ${rashi(p.sign)} (${p.dignity})`).join("; ")],

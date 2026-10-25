@@ -3,7 +3,7 @@
 // cancelled (with the reason), or not formed. Kundlit's versions of these
 // (Neecha Bhanga, Dhana, Kemadruma) are replaced by these in the app.
 import type { Chart, Graha } from "../kundlit-schemas";
-import { EXALTATION_SIGN, SIGN_LORD, debilitationSign, isPlanet, signDistance, type Planet } from "./relations";
+import { EXALTATION_SIGN, SEVEN, SIGN_LORD, debilitationSign, isPlanet, signDistance, type Planet } from "./relations";
 import { houseLords } from "./functional";
 
 const KENDRA = [1, 4, 7, 10];
@@ -48,8 +48,12 @@ export type NeechaBhanga = {
  * 2. lord of the planet's exaltation sign in a kendra;
  * 3. those two lords in mutual kendra;
  * 4. the planet conjunct or aspected by its dispositor;
- * 5. the planet conjunct the planet whose exaltation sign it is (sign level, BPHS);
- * 6. the planet exalted in the D9.
+ * 5. the planet whose exaltation sign is the debilitation sign: conjunct the
+ *    planet, or in a kendra;
+ * 6. the planet exalted in the D9;
+ * 7. (tradition-dependent) the debilitated planet itself in a kendra.
+ * Neecha Bhanga Raja Yoga is partial when the planet is outside a kendra /
+ * trikona, combust, or debilitated again in the D9.
  */
 export function neechaBhanga(chart: Chart): NeechaBhanga[] {
   const lagna = chart.lagna.sign_num;
@@ -82,17 +86,27 @@ export function neechaBhanga(chart: Chart): NeechaBhanga[] {
         fire(`${p} is ${conjunct(g, disp) ? "conjunct" : "aspected by"} its dispositor ${dispName}`, dispName);
       const exaltedHere = chart.grahas.find((x) => isPlanet(x.name) && EXALTATION_SIGN[x.name] === g.sign_num);
       if (exaltedHere && conjunct(g, exaltedHere)) fire(`${p} is conjunct ${exaltedHere.name}, whose exaltation sign this is`, exaltedHere.name);
+      else if (exaltedHere && kendraFrom(exaltedHere))
+        fire(`${exaltedHere.name}, whose exaltation sign is ${p}'s debilitation sign, is in a kendra from the ${kendraFrom(exaltedHere)}`, exaltedHere.name);
       if (g.navamsha.sign_num === EXALTATION_SIGN[p]) fire(`${p} is exalted in the D9`);
+      if (kendraFrom(g)) fire(`${p} itself is in a kendra from the ${kendraFrom(g)} (tradition-dependent)`);
 
       const state: RuleState = rules.length ? "formed" : "not formed";
       const goodHouse = KENDRA.includes(g.house) || TRIKONA.includes(g.house);
+      const d9Debilitated = g.navamsha.sign_num === debilitationSign(p);
       const raja: NeechaBhanga["raja"] = !rules.length
         ? { state: "not formed", why: "the debility is not cancelled" }
-        : goodHouse && !g.combust
-          ? { state: "full", why: `${p} is in Bhava ${g.house} (kendra / trikona) and not combust` }
+        : goodHouse && !g.combust && !d9Debilitated
+          ? { state: "full", why: `${p} is in Bhava ${g.house} (kendra / trikona), not combust, and not debilitated in the D9` }
           : {
               state: "partial",
-              why: [!goodHouse && `${p} is in Bhava ${g.house}, not a kendra or trikona`, g.combust && `${p} is combust`].filter(Boolean).join("; "),
+              why: [
+                !goodHouse && `${p} is in Bhava ${g.house}, not a kendra or trikona`,
+                g.combust && `${p} is combust`,
+                d9Debilitated && `${p} is debilitated again in the D9`,
+              ]
+                .filter(Boolean)
+                .join("; "),
             };
       const byPlanet = [...counts].map(([planet, n]) => ({ planet, rules: n }));
       const WORDS = ["", "one", "two", "three", "four", "five", "six"];
@@ -183,6 +197,37 @@ export function dhana(chart: Chart): Link[] {
     }
   }
   return links;
+}
+
+/** Budhaditya: the Sun and Mercury in the same sign. */
+export function budhaditya(chart: Chart): { sign: string } | null {
+  const sun = byName(chart, "Sun");
+  const mer = byName(chart, "Mercury");
+  return conjunct(sun, mer) ? { sign: sun.sign } : null;
+}
+
+/** Nabhasa akriti yogas of the seven-house family, by the house the run starts in. */
+const SEVEN_HOUSE_AKRITI: Record<number, { key: string; name: string }> = {
+  1: { key: "nabhasa.nauka", name: "Nauka" },
+  4: { key: "nabhasa.kuta", name: "Kuta" },
+  7: { key: "nabhasa.chhatra", name: "Chhatra" },
+  10: { key: "nabhasa.chapa", name: "Chapa" },
+};
+export const SEVEN_HOUSE_AKRITI_KEYS = ["nabhasa.ardhachandra", ...Object.values(SEVEN_HOUSE_AKRITI).map((x) => x.key)];
+
+/**
+ * The seven planets in seven consecutive houses, each house occupied: Nauka,
+ * Kuta, Chhatra or Chapa when the run starts in the 1st, 4th, 7th or 10th,
+ * Ardhachandra when it starts in any other house. Null when not formed.
+ */
+export function sevenHouseAkriti(chart: Chart): { key: string; name: string; startHouse: number } | null {
+  const houses = new Set(SEVEN.map((n) => byName(chart, n).house));
+  if (houses.size !== 7) return null;
+  for (let start = 1; start <= 12; start++) {
+    const run = Array.from({ length: 7 }, (_, i) => ((start + i - 1) % 12) + 1);
+    if (run.every((h) => houses.has(h))) return { ...(SEVEN_HOUSE_AKRITI[start] ?? { key: "nabhasa.ardhachandra", name: "Ardhachandra" }), startHouse: start };
+  }
+  return null;
 }
 
 const NATURAL_BENEFICS: Planet[] = ["Mercury", "Jupiter", "Venus"];

@@ -40,12 +40,13 @@ E2. For each topic, state both the supportive factors and the weakening factors 
 E3. No absolute or deterministic negative phrasing ("very little result", "marked
     difficulties", "will never", "no chance") unless at least two strong factors in FACTS
     agree; then name them. Planet strength words must follow FACTS.grahas[].strength.
-E4. If FACTS.birth_time.warning is true, conclusions depending on the D9 (and on the D1
-    Lagna, if its note is listed) are sensitive to the exact birth time; so are D10
-    conclusions when FACTS.career_d10.birth_time_sensitive is given. EVERY field that makes
-    such a claim, including summary and karmic_perspective, must call it tentative in that
-    field (e.g. "tentatively", "if the birth time is exact"); say why once, in the first
-    such field.
+E4. Birth time. Only the claims in FACTS.birth_time.tentative are tentative: they depend on a
+    divisional chart's Lagna (its houses, its 7th / 10th house and their lords). In each
+    section that makes such a claim, say "tentative" once, attached to that specific claim.
+    Everything in FACTS.birth_time.firm (a planet's own D9 / D10 sign, its dignity there,
+    Vargottama) is firm: never call it tentative. Marriage timing windows are tentative only
+    if marriage.timing_windows_tentative is true. A chart marked not_interpreted is not
+    discussed at all.
 E5. The yogakaraka (FACTS.functional_nature.yogakarakas) is the most important functional
     benefic: use it in career, Dasha and Manglik discussion where it appears.
 E6. Yogas listed together in FACTS.shared_links rest on the same planetary link: present them
@@ -63,6 +64,9 @@ D2. The D9 is judged on its own (grahas[].navamsa_role): supportive, neutral or 
 C1. A Dosha with "intensity: Cancelled" is formed but cancelled: say its formation is noted
     for completeness and that it traditionally does not operate. Do not describe any
     remaining or reduced effect ("not erased", "retains", "residual", "reduces").
+S1. Sade Sati and Shani Dhaiya carry no intensity: describe them through their details in FACTS
+    (natal Shani's role, dignity, combustion, and transiting Shani over natal Shani or Chandra),
+    never as the chart "naming" or "giving" something.
 W1. Marriage timing windows: if you give a number of windows, it must be
     marriage.timing_windows_count. If marriage.timing_windows_ranked is false, do not rank
     or compare the windows (no "stronger", "best", "weaker"); present them in date order.

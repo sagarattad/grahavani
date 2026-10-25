@@ -302,12 +302,21 @@ describe("evidence rules (Oct 2026 review)", () => {
     expect(check("The main weaknesses are weak Shukra, the seventh lord in Bhava 8, and the D10 tenth lord's great enemy dignity.").join()).not.toMatch(/for Venus/);
   });
 
-  it("every field with a D9 / D10 claim carries the birth-time caveat, summary and karmic included (rule E4)", () => {
-    const ctx = { ...placementCtx, birthTimeSensitive: { d9: true, d10: false } };
-    expect(validateReading({ summary: "Support improves in the D9." }, ctx).join()).toMatch(/summary: D9-based claims need the birth-time caveat/);
-    expect(validateReading({ karmic_perspective: "Mangal is exalted in the Navamsa." }, ctx).join()).toMatch(/karmic_perspective/);
-    expect(validateReading({ summary: "Support tentatively improves in the D9." }, ctx)).toEqual([]);
-    expect(validateReading({ summary: "The D10 adds strength." }, ctx)).toEqual([]); // the D10 is not sensitive here
+  it("birth time: Lagna-dependent claims need the caveat once per field; firm planet claims must not get it (rule E4)", () => {
+    const ctx = { ...placementCtx, birthTimeSensitive: { d9: true, d10: false, planets: [] } };
+    const v = (field: string, t: string) => validateReading({ [field]: t }, ctx).join();
+    // Lagna-dependent: the D9 7th house and its lord, in any field (summary and karmic included).
+    expect(v("summary", "The D9 7th house is strong.")).toMatch(/summary: D9 Lagna-dependent claims/);
+    expect(v("karmic_perspective", "The D9 7th lord is well placed.")).toMatch(/karmic_perspective/);
+    expect(v("summary", "Tentatively, the D9 7th house is strong.")).toBe("");
+    // A planet's own D9 dignity is firm: needs no caveat and must not get one.
+    expect(v("summary", "Mangal is exalted in the D9.")).toBe("");
+    expect(v("summary", "Tentatively, Mangal is exalted in the D9.")).toMatch(/firm; do not call them tentative/);
+    expect(validateReading({ summary: "Tentatively, Mangal is exalted in the D9." }, { ...ctx, birthTimeSensitive: { ...ctx.birthTimeSensitive, planets: ["Mars"] } })).toEqual([]);
+    // Once per section.
+    expect(v("marriage", "Tentatively, the D9 7th house is Meena. The D9 Lagna is also tentative.")).toMatch(/once per section/);
+    // The D10 is not sensitive here.
+    expect(v("summary", "The D10 10th lord adds strength.")).toBe("");
   });
 
   it("a cancelled dosha does not operate: no residual wording (rule C1)", () => {
@@ -317,6 +326,18 @@ describe("evidence rules (Oct 2026 review)", () => {
     expect(validateReading({ doshas: "Kemadruma Dosha is formed but cancelled: noted for completeness, it traditionally does not operate." }, ctx)).toEqual([]);
     expect(validateReading({ doshas: "Manglik Dosha remains; cancellations reduce it." }, ctx)).toEqual([]); // not cancelled
     expect(validateReading({ doshas: "Kemadruma is formed but cancelled. Manglik Dosha remains, and its cancellations reduce it." }, ctx)).toEqual([]);
+  });
+
+  it("a D1 house or lord in a sentence about a planet's D9 dignity is not a D9 Lagna claim (live failure)", () => {
+    const ctx = { ...placementCtx, birthTimeSensitive: { d9: true, d10: false, planets: [] } };
+    expect(validateReading({ health_wellbeing: "Chandra, the Lagna lord in Bhava 9, has own sign dignity in the D9." }, ctx).join()).not.toMatch(/Lagna-dependent/);
+    expect(validateReading({ health_wellbeing: "The D9 7th lord is well placed." }, ctx).join()).toMatch(/Lagna-dependent/);
+  });
+
+  it("transit sentences may name Saturn's and Jupiter's transit signs (live failure)", () => {
+    const t = kundliCtx.transitPlacements!.find((p) => p.graha === "Jupiter" && !kundliCtx.placements.some((q) => q.graha === "Jupiter" && q.rashi === p.rashi))!;
+    expect(check(`The window has a double transit, with Guru in ${t.rashi}.`)).toEqual([]);
+    expect(check(`Guru in ${t.rashi} gives wisdom.`).join()).toMatch(/not in the computed facts/);
   });
 
   it("window count and ranking follow FACTS (rule W1)", () => {

@@ -22,18 +22,27 @@ export type BirthTimeCheck = {
   d9: LagnaShift;
   d10: LagnaShift;
   warn: boolean;
-  /** Which charts change within SENSITIVE_MINUTES. */
+  /** Whose Lagna changes within SENSITIVE_MINUTES: claims that depend on that Lagna are tentative. */
   sensitive: { d1: boolean; d9: boolean; d10: boolean };
+  /** Lagna changes within UNREADABLE_MINUTES: the chart is shown but not interpreted. */
+  uninterpretable: { d9: boolean; d10: boolean };
+  /** Planets that could change their own sign in that chart within SENSITIVE_MINUTES (realistically only the Moon). */
+  planetsSensitive: { d1: string[]; d9: string[]; d10: string[] };
   /** "The D9 Lagna would be Simha if birth was about 5 minutes earlier." style lines (all charts). */
   notes: string[];
   /** The same lines per chart, for showing the D9 one by marriage and the D10 one by career. */
   notesBy: { d1: string[]; d9: string[]; d10: string[] };
 };
 
+/** A Lagna change within this many minutes makes claims depending on that Lagna tentative. */
 export const SENSITIVE_MINUTES = 10;
+/** The D1 Lagna change is shown (not treated as sensitive) up to this many minutes. */
+export const D1_NOTE_MINUTES = 30;
+/** A divisional chart whose Lagna changes within this many minutes is shown but not interpreted. */
+export const UNREADABLE_MINUTES = 2;
 
-/** Minutes are rounded down everywhere ("about 7 minutes" when it is 7.5). */
-export const wholeMinutes = (m: number) => (m < 1 ? "less than 1 minute" : `${Math.floor(m)} minute${Math.floor(m) === 1 ? "" : "s"}`);
+/** Minutes are rounded down everywhere ("about 7 minutes" when it is 7.5; "less than 1 minute" below that). */
+export const wholeMinutes = (m: number) => (m < 1 ? "less than 1 minute" : `about ${Math.floor(m)} minute${Math.floor(m) === 1 ? "" : "s"}`);
 
 /** When the Lagna of a divisional chart with `size`-degree parts changes, earlier and later. */
 function vargaShift(sign: number, deg: number, rate: number, size: number, vargaOf: (sign: number, deg: number) => number): LagnaShift {
@@ -48,6 +57,20 @@ function vargaShift(sign: number, deg: number, rate: number, size: number, varga
   };
 }
 
+/** Fastest daily motion (degrees) each graha reaches, so a planet's sign change within minutes is never missed. */
+const MAX_SPEED: Record<string, number> = { Moon: 15.4, Mercury: 2.2, Venus: 1.26, Sun: 1.02, Mars: 0.8, Jupiter: 0.25, Saturn: 0.13, Rahu: 0.2, Ketu: 0.2 };
+
+/** Planets whose own sign in a chart with `size`-degree parts could change within `minutes` of the birth time. */
+function planetsNearBoundary(chart: Chart, size: number, minutes: number): string[] {
+  return chart.grahas
+    .filter((g) => {
+      const pos = g.deg_in_sign % size;
+      const toEdge = Math.min(pos, size - pos);
+      return toEdge < ((MAX_SPEED[g.name] ?? 1) * minutes) / 1440;
+    })
+    .map((g) => g.name);
+}
+
 /** Minutes until the D1, D9 and D10 Lagna change sign, earlier and later. Null without Kundlit's lagna_confidence_minutes. */
 export function birthTimeCheck(chart: Chart, signName: (n: number) => string): BirthTimeCheck | null {
   const { sign_num: sign, deg_in_sign: deg, lagna_confidence_minutes: toNext } = chart.lagna;
@@ -57,17 +80,24 @@ export function birthTimeCheck(chart: Chart, signName: (n: number) => string): B
   const d9 = vargaShift(sign, deg, rate, 10 / 3, navamsaSign);
   const d10 = vargaShift(sign, deg, rate, 3, dasamsaSign);
   const notesBy = { d1: [] as string[], d9: [] as string[], d10: [] as string[] };
-  const add = (key: "d1" | "d9" | "d10", s: LagnaShift) => {
+  const add = (key: "d1" | "d9" | "d10", s: LagnaShift, within: number) => {
     const what = `The ${key.toUpperCase()} Lagna`;
-    if (s.earlier < SENSITIVE_MINUTES) notesBy[key].push(`${what} would be ${signName(s.earlierSign)} if birth was about ${wholeMinutes(s.earlier)} earlier.`);
-    if (s.later < SENSITIVE_MINUTES) notesBy[key].push(`${what} would be ${signName(s.laterSign)} if birth was about ${wholeMinutes(s.later)} later.`);
+    if (s.earlier < within) notesBy[key].push(`${what} would be ${signName(s.earlierSign)} if birth was ${wholeMinutes(s.earlier)} earlier.`);
+    if (s.later < within) notesBy[key].push(`${what} would be ${signName(s.laterSign)} if birth was ${wholeMinutes(s.later)} later.`);
   };
-  add("d1", d1);
-  add("d9", d9);
-  add("d10", d10);
-  const sensitive = { d1: notesBy.d1.length > 0, d9: notesBy.d9.length > 0, d10: notesBy.d10.length > 0 };
+  add("d1", d1, D1_NOTE_MINUTES);
+  add("d9", d9, SENSITIVE_MINUTES);
+  add("d10", d10, SENSITIVE_MINUTES);
+  const near = (s: LagnaShift, m: number) => s.earlier < m || s.later < m;
+  const sensitive = { d1: near(d1, SENSITIVE_MINUTES), d9: near(d9, SENSITIVE_MINUTES), d10: near(d10, SENSITIVE_MINUTES) };
+  const uninterpretable = { d9: near(d9, UNREADABLE_MINUTES), d10: near(d10, UNREADABLE_MINUTES) };
+  const planetsSensitive = {
+    d1: planetsNearBoundary(chart, 30, SENSITIVE_MINUTES),
+    d9: planetsNearBoundary(chart, 10 / 3, SENSITIVE_MINUTES),
+    d10: planetsNearBoundary(chart, 3, SENSITIVE_MINUTES),
+  };
   const notes = [...notesBy.d1, ...notesBy.d9, ...notesBy.d10];
-  return { rate, d1, d9, d10, warn: notes.length > 0, sensitive, notes, notesBy };
+  return { rate, d1, d9, d10, warn: notes.length > 0, sensitive, uninterpretable, planetsSensitive, notes, notesBy };
 }
 
 // ---------- D10 (career) ----------

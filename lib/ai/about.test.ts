@@ -34,7 +34,9 @@ describe("About items", () => {
   });
 
   it("a running transit dosha names its phase, without dates", () => {
-    expect(items.find((i) => i.key === "dhaiya")!.details).toEqual(["Running phase: Ashtama Shani (8th from Chandra)"]);
+    const details = items.find((i) => i.key === "dhaiya")!.details;
+    expect(details.at(-1)).toBe("Running phase: Ashtama Shani (8th from Chandra)");
+    expect(details[0]).toMatch(/^Natal Shani: lord of /);
   });
 
   it("FACTS contain no dates, names or birth details", () => {

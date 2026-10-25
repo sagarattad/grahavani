@@ -97,8 +97,10 @@ export function MarriageCareerSection({ chart, asOf }: { chart: Chart; asOf: str
       <h3 className="mb-2 text-sm font-bold">Marriage (D1 and Navamsa)</h3>
       {bt && (bt.sensitive.d1 || bt.sensitive.d9) && (
         <p className="mb-2 rounded-lg bg-warn-bg px-3 py-2 text-xs text-warn">
-          {[...bt.notesBy.d1, ...bt.notesBy.d9].join(" ")} D9-based statements
-          are sensitive to the exact birth time.
+          {[...bt.notesBy.d1, ...bt.notesBy.d9].join(" ")}{" "}
+          {bt.uninterpretable.d9
+            ? "The D9 is shown but not interpreted: its Lagna changes within 2 minutes of the birth time."
+            : "Claims that depend on the D9 Lagna (its houses, the 7th and its lord) are tentative; planets' own D9 signs are firm."}
         </p>
       )}
       <Rows
@@ -176,8 +178,10 @@ export function MarriageCareerSection({ chart, asOf }: { chart: Chart; asOf: str
       <h3 className="mb-2 mt-5 text-sm font-bold">Career (D10, Dashamsha)</h3>
       {d10 && bt?.sensitive.d10 && (
         <p className="mb-2 rounded-lg bg-warn-bg px-3 py-2 text-xs text-warn">
-          {bt.notesBy.d10.join(" ")} D10-based statements are sensitive to the
-          exact birth time.
+          {bt.notesBy.d10.join(" ")}{" "}
+          {bt.uninterpretable.d10
+            ? "The D10 is shown but not interpreted: its Lagna changes within 2 minutes of the birth time."
+            : "Claims that depend on the D10 Lagna (its houses, the 10th and its lord) are tentative; planets' own D10 signs are firm."}
         </p>
       )}
       {d10 ? (

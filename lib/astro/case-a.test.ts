@@ -152,11 +152,23 @@ describe.skipIf(!present)("regression: case A (local-only fixture)", () => {
       expect(kemadrumaCard(chart, asOf).rating.label).toBe(r4.kemadruma_rating);
     });
 
-    it("Saturn phases start at the final entry and never overlap", () => {
+    it("Saturn phases: Rising from the first entry, later phases from the final entry, never overlapping", () => {
       const ss = sadeSatiRanges(chart, asOf).slice(0, 3);
       expect(Object.fromEntries(ss.map((r) => [r.label, r.start.slice(0, 10)]))).toEqual(r4.phase_starts);
-      expect(ss[0].earlyEntries![0].start.slice(0, 10)).toBe(r4.rising_early_entry);
+      const back = ss[0].dips!.find((d) => d.direction === "back")!;
+      expect([back.start.slice(0, 10), back.end.slice(0, 10)]).toEqual(expected.round5.rising_dip_back);
+      expect(ss[1].earlyEntries![0].start.slice(0, 10)).toBe(expected.round5.peak_early_entry);
       for (let i = 1; i < ss.length; i++) expect(ss[i].start).toBe(ss[i - 1].end);
+    });
+
+    it("birth time: only Lagna-dependent D9 / D10 claims are tentative; planets' own signs are firm", () => {
+      const { facts } = kundliFacts(chart, chart.vimshottari.current, { manglik: null, kaalSarp: null });
+      const bt = facts.birth_time as { tentative: string[]; firm: string };
+      for (const t of expected.round5.tentative_contains) expect(bt.tentative.join(" | ")).toContain(t);
+      // Only the Moon moves fast enough: it sits 0.03° from a D10 boundary (about 3 minutes).
+      expect(bt.firm).toBe(expected.round5.firm);
+      expect(bt.firm).not.toMatch(/Mangal|Guru/); // Mars exalted in the D9 and Jupiter Vargottama stay firm
+      expect((facts.marriage as Record<string, unknown>).timing_windows_tentative).toBe(false);
     });
 
     it("no repeated labels in the marriage lines", () => {

@@ -7,6 +7,7 @@ import { graha } from "./glossary";
 import type { Chart, KaalSarp, Koot, Manglik } from "./kundlit-schemas";
 import type { ManglikResult } from "./astro/manglik";
 import { chartStrengths, strengthReason, type PlanetStrength, type StrengthLevel } from "./astro/planet-strength";
+import { houseLords } from "./astro/functional";
 
 export type YogaLevel = "Strong" | "Moderate" | "Weak";
 /** "Cancelled": formed but cancelled, noted for completeness; traditionally it does not operate. */
@@ -26,7 +27,7 @@ export const PARTIAL_POINTS_NOTE =
   "When Nadi or Bhakoot Dosha is cancelled, our calculation (Kundlit) gives partial points (e.g. 4 / 8). Some websites score a cancelled dosha differently, for example as full points or as 0.";
 
 export const RATING_NOTE =
-  "Grahavani's classical rating. Each planet gets a composite strength from dignity (BPHS degree zones for exaltation and moolatrikona; friendship by the compound relation, with temporary friendship taken from the D1 positions, also for D9 and D10 dignity), house, D9 dignity and Vargottama, combustion, retrogression, Dig bala at its extremes (±0.5), the Moon's paksha bala, and Baladi avastha as a minor factor; Rahu and Ketu have no sign dignity and take their house, their dispositor's strength and the planets they sit with. A planet is Strong from a score of 3, Moderate from 0.5, and marked borderline within 0.25 of either. A Yoga's rating is the average of its planets' levels (Weak 0, Moderate 1, Strong 2), rounded down; a Bhanga lowers it one level. Not full Shadbala; schools weigh these differently.";
+  "Grahavani's classical rating. Each planet gets a composite strength from dignity (BPHS degree zones for exaltation and moolatrikona; friendship by the compound relation, with temporary friendship taken from the D1 positions, also for D9 and D10 dignity), house, D9 dignity and Vargottama, combustion, retrogression, Dig bala at its extremes (±0.5), the Moon's paksha bala, and Baladi avastha as a minor factor; Rahu and Ketu have no sign dignity and take their house, their dispositor's strength and the planets they sit with. A planet is Strong from a score of 3, Moderate from 0.5, and marked borderline within 0.25 of either. A Yoga's rating is the average of its planets' levels (Weak 0, Moderate 1, Strong 2), rounded down; a Raj Yoga combination that includes the 8th lord is one level lower (blemished), and unblemished combinations are preferred; a Bhanga lowers it one level. The Moon is never counted combust (paksha bala scores its distance from the Sun). Not full Shadbala; schools weigh these differently.";
 
 const NODES = new Set(["Rahu", "Ketu"]);
 const YOGA_LEVELS: YogaLevel[] = ["Weak", "Moderate", "Strong"];
@@ -52,22 +53,27 @@ const yogaRating = (level: YogaLevel | null, reasons: string[], basis?: string[]
  * Moderate 1, Strong 2), rounded down; Rahu / Ketu are left out when another
  * planet takes part. Rounding down keeps a yoga from being stronger than the
  * support behind it (and makes a separate "one above the weakest" cap
- * unnecessary). The yoga takes its best combination (ties: higher average
- * score); a Bhanga lowers it one level.
+ * unnecessary). A Raj Yoga combination with a planet that also rules the 8th
+ * is blemished: one level lower. The yoga takes its best combination,
+ * preferring unblemished ones (ties: higher average score); a Bhanga lowers it
+ * one level.
  */
 export function rateYoga(y: RatableYoga, chart: Chart, strengths: Map<string, PlanetStrength> = chartStrengths(chart)): Rating<YogaLevel> {
   if (y.nabhasa) return yogaRating(null, ["Describes the overall pattern of the chart"]);
 
-  let best: { idx: number; score: number; ps: PlanetStrength[] } | null = null;
+  const eighthLord = houseLords(chart.lagna.sign_num)[8];
+  let best: { idx: number; score: number; ps: PlanetStrength[]; blemish: string | null } | null = null;
   for (const c of y.combinations) {
     const others = c.participants.filter((p) => !NODES.has(p));
     const names = others.length ? others : c.participants;
     const ps = names.map((n) => strengths.get(n));
     if (ps.length === 0 || ps.some((p) => !p)) return yogaRating(null, ["Data unavailable for this chart"]);
     const list = ps as PlanetStrength[];
-    const idx = Math.floor(list.reduce((s, p) => s + LEVEL_INDEX[p.level], 0) / list.length + 1e-9);
+    const blemish = y.key === "yoga.raja" && list.some((p) => p.name === eighthLord) ? `${graha(eighthLord)} also rules the 8th: blemished, one level lower` : null;
+    const idx = Math.max(0, Math.floor(list.reduce((s, p) => s + LEVEL_INDEX[p.level], 0) / list.length + 1e-9) - (blemish ? 1 : 0));
     const score = list.reduce((s, p) => s + p.score, 0) / list.length;
-    if (!best || idx > best.idx || (idx === best.idx && score > best.score)) best = { idx, score, ps: list };
+    const better = !best || (best.blemish !== null && blemish === null) || ((best.blemish === null) === (blemish === null) && (idx > best.idx || (idx === best.idx && score > best.score)));
+    if (better) best = { idx, score, ps: list, blemish };
   }
   if (!best) return yogaRating(null, ["Data unavailable for this chart"]);
 
@@ -77,8 +83,9 @@ export function rateYoga(y: RatableYoga, chart: Chart, strengths: Map<string, Pl
   if (best.ps.length > 1) {
     const sum = best.ps.map((p) => `${graha(p.name)} ${p.level} (${LEVEL_INDEX[p.level]})`).join(" + ");
     const avg = best.ps.reduce((s, p) => s + LEVEL_INDEX[p.level], 0) / best.ps.length;
-    reasons.push(`${sum}: average ${Math.round(avg * 100) / 100}, rounded down → ${YOGA_LEVELS[best.idx]}`);
+    reasons.push(`${sum}: average ${Math.round(avg * 100) / 100}, rounded down → ${YOGA_LEVELS[Math.floor(avg + 1e-9)]}`);
   }
+  if (best.blemish) reasons.push(`${best.blemish} → ${YOGA_LEVELS[best.idx]}`);
   const borderline = best.ps.filter((p) => p.borderline);
   if (borderline.length) reasons.push(`Borderline: depends on ${borderline.map((p) => `${graha(p.name)} (score ${p.score})`).join(" and ")}, close to a level threshold`);
   if (y.status === "cancelled") {
@@ -156,17 +163,6 @@ export function rateKemadruma(present: boolean, cancellations: string[]): Rating
   return cancellations.length
     ? doshaRating("Cancelled", [CANCELLED_NOTE, ...cancellations.map((c) => `Cancelled by: ${c}`)])
     : doshaRating("Medium", ["Formed, and none of the classical cancellations apply"]);
-}
-
-export function rateSadeSati(runningPhase: string | null): Rating<DoshaLevel> {
-  if (!runningPhase) return doshaRating(null, []);
-  return runningPhase === "Peak"
-    ? doshaRating("High", ["Peak phase: Shani over Chandra's own Rashi"])
-    : doshaRating("Medium", [`${runningPhase} phase`]);
-}
-
-export function rateDhaiya(running: boolean): Rating<DoshaLevel> {
-  return running ? doshaRating("Medium", ["Running now"]) : doshaRating(null, []);
 }
 
 /** Nadi / Bhakoot: present and not cancelled → High; cancelled → Low. */

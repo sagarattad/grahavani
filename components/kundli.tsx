@@ -6,7 +6,7 @@ import { d1Houses, d9Houses } from "@/lib/chart/northIndian";
 import { graha, grahaWithMeaning, nakshatra, rashi } from "@/lib/glossary";
 import { birthDateTime, dashaBalanceText, dateOnly, dms } from "@/lib/format";
 import { antardashas, contains } from "@/lib/dasha";
-import { sharedLinks, yogaChecklist } from "@/lib/yogas";
+import { sharedLinkText, sharedLinks, yogaChecklist } from "@/lib/yogas";
 import { WindowList } from "./periods";
 import { AboutToggle } from "./About";
 import { RatingLine } from "./rating";
@@ -284,13 +284,13 @@ export function DashaSection({ chart, current }: { chart: Chart; current: DashaC
 
 export function YogasSection({ chart, asOf }: { chart: Chart; asOf: string }) {
   const { present, absent } = yogaChecklist(chart, asOf);
-  const shared = sharedLinks(present);
+  const shared = sharedLinks(present, chart);
   return (
     <Section title={<Term id="yoga" full />}>
       {present.length === 0 && <p className="text-sm text-muted">No yogas were reported for this chart.</p>}
       {shared.map((l) => (
-        <p key={l.planets.join("+")} className="mb-3 rounded-lg bg-warn-bg px-3 py-2 text-xs text-warn">
-          {l.yogas.join(", ")} rest on the same {l.planets.map(graha).join("–")} link: read them as one support, not as separate strengths.
+        <p key={l.yogas.join("+")} className="mb-3 rounded-lg bg-warn-bg px-3 py-2 text-xs text-warn">
+          {sharedLinkText(l)}
         </p>
       ))}
       <ul className="space-y-3">

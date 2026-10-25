@@ -131,6 +131,7 @@ export const YOGA_CHECKLIST: { ruleId: string; label: Label; grahavani?: true }[
   { ruleId: "yoga.sunaphaa", label: { en: "Sunapha", hi: "", meaning: "a graha 2nd from Chandra" } },
   { ruleId: "yoga.anaphaa", label: { en: "Anapha", hi: "", meaning: "a graha 12th from Chandra" } },
   { ruleId: "yoga.durdhura", label: { en: "Durudhura", hi: "", meaning: "grahas on both sides of Chandra" } },
+  { ruleId: "yoga.budhaditya", label: { en: "Budhaditya", hi: "", meaning: "Surya and Budh together" }, grahavani: true },
   { ruleId: "yoga.vesi", label: { en: "Vesi", hi: "", meaning: "a graha 2nd from Surya" } },
   { ruleId: "yoga.vasi", label: { en: "Vasi", hi: "", meaning: "a graha 12th from Surya" } },
   { ruleId: "yoga.ubhayachari", label: { en: "Ubhayachari", hi: "", meaning: "grahas on both sides of Surya" } },

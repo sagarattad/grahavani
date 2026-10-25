@@ -86,7 +86,7 @@ const NOT_COVERED_RE = /\b(not|isn['’]t|no|never|doesn['’]t|different|separa
 const DETERMINISTIC_RE = /\b(very little results?|marked difficult(?:y|ies)|will (?:never|certainly|definitely)\b[^.]*|is (?:certain|guaranteed|bound) to|no chance of)\b/i;
 
 // Method / pipeline wording belongs in the page footnotes, not in the reading.
-const META_RE = /\b(not computed|(?:explicitly )?not counted|recorded as|rating basis|the data shows)\b/i;
+const META_RE = /\b(not computed|(?:explicitly )?not counted|recorded as|rating basis|the data shows|the chart (?:names|gives|lists|records))\b/i;
 const META_CASED_RE = /\bFACTS\b/;
 
 // A qualitative Dig bala / directional strength claim ("low directional strength").
@@ -101,6 +101,13 @@ const RESIDUAL_RE = /\b(not (?:fully )?(?:erased|removed|eliminated)|without (?:
 
 // A birth-time caveat, required in every field that makes a D9 / D10 claim when that chart is sensitive (rule E4).
 const TENTATIVE_RE = /tentativ|sensitive to (?:the )?(?:exact )?birth[- ]time|birth[- ]time[- ]sensitive|if the birth time is (?:exact|accurate)|depends? on (?:the )?exact birth time/i;
+
+// A sentence about transits ("double transit", "Shani aspecting from Mithuna").
+const TRANSIT_CUE_RE = /\btransit|aspecting from|aspects? from\b/i;
+// Claims that depend on a chart's Lagna: its houses, its 7th / 10th and their lords.
+const LAGNA_DEP_RE = /\b(lagna|ascendant|house|bhava|7th|seventh|10th|tenth|lord)\b/i;
+// A planet's own varga sign or dignity there.
+const FIRM_CLAIM_RE = /\b(exalted|debilitated|own sign|moolatrikona|vargottama|great friend|great enemy|friend|enemy|neutral)\b/gi;
 
 // "two windows", "3 timing windows"
 const WINDOW_COUNT_RE = /\b(one|two|three|four|five|six|seven|eight|\d{1,2})\s+(?:[a-z-]+\s+){0,3}?windows?\b/gi;
@@ -248,12 +255,29 @@ export function validateReading(output: unknown, ctx: ValidationContext): string
     });
   }
 
-  // Birth-time caveat per field (rule E4): summary and karmic_perspective included.
+  // Birth-time caveat per field (rule E4). Only claims that depend on a sensitive chart's Lagna
+  // (its houses, its 7th / 10th and their lords) are tentative; they need "tentative" in their
+  // field, said once. A planet's own varga sign, dignity or Vargottama is firm unless the planet
+  // itself is listed as sensitive, so "tentative" must not be attached to it.
   if (ctx.birthTimeSensitive && output && typeof output === "object") {
+    const bt = ctx.birthTimeSensitive;
     for (const [field, value] of Object.entries(output as Record<string, unknown>)) {
-      if (typeof value !== "string" || TENTATIVE_RE.test(value)) continue;
-      for (const [chart, re] of [["D9", D9_RE], ["D10", D10_RE]] as const) {
-        if (ctx.birthTimeSensitive[chart === "D9" ? "d9" : "d10"] && re.test(value)) problems.push(`${field}: ${chart}-based claims need the birth-time caveat ("tentative") in this field too`);
+      if (typeof value !== "string") continue;
+      const sentences = sentencesOf(value);
+      // Lagna-dependent only when the house / Lagna / lord word sits next to the chart's name
+      // ("the D9 7th lord", "7th house of the D9"), not a D1 house elsewhere in the sentence.
+      const dependent = (re: RegExp) =>
+        sentences.some((x) => [...x.matchAll(new RegExp(re.source, "gi"))].some((m) => LAGNA_DEP_RE.test(x.slice(Math.max(0, m.index! - 30), m.index! + m[0].length + 30))));
+      const caveat = TENTATIVE_RE.test(value);
+      for (const [chart, re, on] of [["D9", D9_RE, bt.d9], ["D10", D10_RE, bt.d10]] as const) {
+        if (on && !caveat && dependent(re)) problems.push(`${field}: ${chart} Lagna-dependent claims (houses, 7th / 10th and their lords) need "tentative" in this field`);
+      }
+      const count = (value.match(/tentativ/gi) ?? []).length;
+      if (count > 1) problems.push(`${field}: say "tentative" once per section, on the specific claim (${count} times)`);
+      for (const x of sentences) {
+        if (!/tentativ/i.test(x) || LAGNA_DEP_RE.test(x)) continue;
+        const firm = [...x.matchAll(FIRM_CLAIM_RE)].map((m) => planetNear(x, m.index!)).find((p) => p && !(bt.planets ?? []).includes(p));
+        if (firm) problems.push(`"${x.slice(0, 80)}": ${firm}'s own varga sign and dignity are firm; do not call them tentative`);
       }
     }
   }
@@ -328,7 +352,11 @@ export function validateReading(output: unknown, ctx: ValidationContext): string
     for (const m of sentence.matchAll(PLACEMENT_RE)) {
       const api = grahaAlias.get(m[1].toLowerCase().replace(/\s+/g, " "));
       if (!api) continue;
-      const mine = ctx.placements.filter((p) => p.graha === api && (p.chart === "d1" || (mentionsD9 && p.chart === "d9") || (mentionsD10 && p.chart === "d10")));
+      const mine = [
+        ...ctx.placements.filter((p) => p.graha === api && (p.chart === "d1" || (mentionsD9 && p.chart === "d9") || (mentionsD10 && p.chart === "d10"))),
+        // A sentence about transits may name where Saturn or Jupiter transits.
+        ...(TRANSIT_CUE_RE.test(sentence) ? (ctx.transitPlacements ?? []).filter((p) => p.graha === api) : []),
+      ];
       if (m[2]) {
         const r = rashiAlias.get(m[2].toLowerCase());
         if (r && !mine.some((p) => p.rashi === r)) problems.push(`"${m[0]}" is not in the computed facts`);

@@ -84,7 +84,13 @@ export async function getOrCreateMilan(boy: BirthChart, girl: BirthChart) {
   });
 }
 
-export const chartOf = (row: BirthChart) => row.chart as unknown as Chart;
+/** A stored chart. Charts saved before the parse-time Moon rule (lib/kundlit-schemas.ts) still flag a combust Moon; clear it here too. */
+export const chartOf = (row: BirthChart): Chart => {
+  const chart = row.chart as unknown as Chart;
+  return chart.grahas.some((g) => g.name === "Moon" && g.combust)
+    ? { ...chart, grahas: chart.grahas.map((g) => (g.name === "Moon" ? { ...g, combust: false } : g)) }
+    : chart;
+};
 
 /** Stored Manglik JSON, re-parsed so old rows can never leak remedies. */
 export const manglikOf = (row: Pick<ManglikResult, "result">): Manglik => manglikSchema.parse(row.result);

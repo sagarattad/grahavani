@@ -9,11 +9,12 @@ import { signStays, type SlowPlanet } from "./ephemeris";
 
 export type TransitStay = { planet: SlowPlanet; sign: number; start: string; end: string; fromMoon: number; fromLagna: number };
 /**
- * One Saturn phase, from Saturn's final entry into the sign (after which it
- * does not go back to the previous sign) to its final exit, so consecutive
- * phases never overlap. `earlyEntries`: brief earlier entries into the sign,
- * before Saturn went back. `dips`: spells outside the sign inside the phase.
- * `startsBefore` / `continuesBeyond`: the phase is cut by the computed span.
+ * One Saturn phase, ending at Saturn's final exit from the sign. It starts at
+ * the first entry when it opens a sequence (Sade Sati's Rising) or stands
+ * alone (each Dhaiya), and at the final entry when it follows another phase
+ * (Peak, Setting), so consecutive phases never overlap. `earlyEntries`: brief
+ * earlier entries before that final entry. `dips`: spells outside the sign
+ * inside the phase. `startsBefore` / `continuesBeyond`: cut by the span.
  */
 export type PhaseRange = {
   label: string;
@@ -58,29 +59,31 @@ export function slowTransits(chart: Chart, asOf: string, planet: SlowPlanet): Tr
   }));
 }
 
-const SADE_SATI: Record<number, string> = { 12: "Rising", 1: "Peak", 2: "Setting" };
-const DHAIYA: Record<number, string> = { 4: "Ardhashtama / Kantaka (4th from Chandra)", 8: "Ashtama Shani (8th from Chandra)" };
+/** House from the Moon → label, and whether the phase starts at the first entry (opens a sequence or stands alone). */
+type PhaseDef = Record<number, { label: string; fromFirstEntry: boolean }>;
+const SADE_SATI: PhaseDef = { 12: { label: "Rising", fromFirstEntry: true }, 1: { label: "Peak", fromFirstEntry: false }, 2: { label: "Setting", fromFirstEntry: false } };
+const DHAIYA: PhaseDef = {
+  4: { label: "Ardhashtama / Kantaka (4th from Chandra)", fromFirstEntry: true },
+  8: { label: "Ashtama Shani (8th from Chandra)", fromFirstEntry: true },
+};
 // Stays of the same phase closer than this are one phase with retrograde dips between them.
 const SAME_PHASE_GAP = 2 * YEAR;
 
-/**
- * Saturn's phases in the given houses from the Moon that end after `asOf`,
- * each shown once: from the final entry into the sign to the final exit.
- */
-function saturnPhases(chart: Chart, asOf: string, labels: Record<number, string>): PhaseRange[] {
+/** Saturn's phases in the given houses from the Moon that end after `asOf`, each shown once (see PhaseRange). */
+function saturnPhases(chart: Chart, asOf: string, defs: PhaseDef): PhaseRange[] {
   const now = ms(asOf);
   const span = transitSpan(chart, asOf);
   const stays = slowTransits(chart, asOf, "Saturn");
   const prev = (sign: number) => ((sign + 10) % 12) + 1;
   const out: PhaseRange[] = [];
-  for (const house of Object.keys(labels).map(Number)) {
+  for (const house of Object.keys(defs).map(Number)) {
     let group: number[] = []; // indexes into `stays`
     const flush = () => {
       if (!group.length) return;
       const sign = stays[group[0]].sign;
-      // The final entry from the previous sign; a phase cut at the span start begins at its first stay.
+      // The final entry from the previous sign, unless the phase starts at its first entry.
       const entries = group.filter((k) => k === 0 || stays[k - 1].sign === prev(sign));
-      const first = entries.length ? entries[entries.length - 1] : group[0];
+      const first = defs[house].fromFirstEntry || !entries.length ? group[0] : entries[entries.length - 1];
       const last = group[group.length - 1];
       const startMs = ms(stays[first].start);
       const endMs = ms(stays[last].end);
@@ -89,7 +92,7 @@ function saturnPhases(chart: Chart, asOf: string, labels: Record<number, string>
         .filter((x) => ms(x.start) >= startMs && ms(x.end) <= endMs && x.sign !== sign)
         .map((x) => ({ sign: x.sign, start: x.start, end: x.end, direction: x.sign === prev(sign) ? ("back" as const) : ("ahead" as const) }));
       out.push({
-        label: labels[house],
+        label: defs[house].label,
         start: stays[first].start,
         end: stays[last].end,
         current: startMs <= now && now < endMs,
@@ -115,6 +118,32 @@ export const sadeSatiRanges = (chart: Chart, asOf: string) => saturnPhases(chart
 
 /** Shani Dhaiya: Saturn in the 4th (Ardhashtama / Kantaka) or 8th (Ashtama Shani) from the natal Moon. */
 export const dhaiyaRanges = (chart: Chart, asOf: string) => saturnPhases(chart, asOf, DHAIYA);
+
+/**
+ * Transiting Saturn in the sign of natal Saturn (Saturn return) or of the
+ * natal Moon, ending after `asOf`: first entry to final exit, retrograde
+ * returns included.
+ */
+export function saturnOverNatal(chart: Chart, asOf: string): { over: ("Saturn" | "Moon")[]; sign: number; start: string; end: string }[] {
+  const now = ms(asOf);
+  const natal = (n: string) => chart.grahas.find((g) => g.name === n)!.sign_num;
+  const stays = slowTransits(chart, asOf, "Saturn");
+  const out: { over: ("Saturn" | "Moon")[]; sign: number; start: string; end: string }[] = [];
+  for (const sign of [...new Set([natal("Saturn"), natal("Moon")])]) {
+    const over = (["Saturn", "Moon"] as const).filter((n) => natal(n) === sign);
+    let run: TransitStay[] = [];
+    const flush = () => {
+      if (run.length && ms(run[run.length - 1].end) > now) out.push({ over: [...over], sign, start: run[0].start, end: run[run.length - 1].end });
+      run = [];
+    };
+    for (const st of stays.filter((x) => x.sign === sign)) {
+      if (run.length && ms(st.start) - ms(run[run.length - 1].end) > SAME_PHASE_GAP) flush();
+      run.push(st);
+    }
+    flush();
+  }
+  return out.sort((a, b) => ms(a.start) - ms(b.start));
+}
 
 /** Classically favourable Jupiter transits from the natal Moon (gochara). */
 export const JUPITER_GOOD_FROM_MOON = [2, 5, 7, 9, 11];

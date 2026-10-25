@@ -47,7 +47,10 @@ const grahaSchema = position.extend({
   aspect_grahas: z.array(z.string()).nullish(),
   sun_separation_deg: z.number().nullish(),
   dashamsha: z.object({ sign: z.string(), sign_num: signNum, lord: z.string() }).nullish(),
-});
+})
+  // Kundlit flags the Moon combust near a new Moon. Classically the Moon is not
+  // treated as combust: its distance from the Sun is scored by paksha bala instead.
+  .transform((g) => (g.name === "Moon" ? { ...g, combust: false } : g));
 
 const bhavaSchema = z.object({
   num: z.number().int().min(1).max(12),

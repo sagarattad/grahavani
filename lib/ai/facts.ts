@@ -14,11 +14,11 @@ import { chartStrengths } from "../astro/planet-strength";
 import { functionalNature } from "../astro/functional";
 import { dignityFact, vargaReading, type Dignity } from "../astro/relations";
 import { ownHouseLords } from "../astro/rules";
-import { marriageFactors } from "../astro/marriage";
+import { marriageFactors, type MarriageFactors } from "../astro/marriage";
 import { marriageSignificators, marriageTiming } from "../astro/marriage-timing";
-import { birthTimeCheck, careerD10, d10Fact, transitOverlaps } from "../astro/timing-checks";
+import { birthTimeCheck, careerD10, d10Fact, transitOverlaps, type BirthTimeCheck, type CareerD10 } from "../astro/timing-checks";
 import { readDashaLord, type DashaLordReading } from "../astro/dasha-lords";
-import { JUPITER_GOOD_FROM_MOON } from "../astro/transits";
+import { JUPITER_GOOD_FROM_MOON, slowTransits } from "../astro/transits";
 import { dasamsaSign } from "../astro/varga";
 import type { ManglikResult } from "../astro/manglik";
 
@@ -32,12 +32,14 @@ export type ValidationContext = {
   allowedDates?: string[];
   /** Rated Yogas / Doshas: the names the text may use for each, and its fixed rating phrase. */
   ratings?: RatingEntry[];
+  /** Signs Saturn and Jupiter transit over the computed span (allowed in sentences about transits). */
+  transitPlacements?: { graha: string; rashi: string; bhava?: number }[];
   /** Planets (API names) whose composite strength lists Dig bala as a factor. */
   digBalaFactor?: string[];
   /** Each planet's one dignity (compound relation or own / exalted / …) per chart. */
   dignities?: Record<string, { d1?: string; d9?: string; d10?: string }>;
-  /** Charts whose Lagna changes within minutes of the birth time: their claims must be tentative. */
-  birthTimeSensitive?: { d9: boolean; d10: boolean };
+  /** Charts whose Lagna changes within minutes of the birth time (their Lagna-dependent claims are tentative), and planets that could change their own varga sign. */
+  birthTimeSensitive?: { d9: boolean; d10: boolean; planets?: string[] };
   /** Names of doshas that are formed but cancelled (they traditionally do not operate). */
   cancelledDoshas?: string[];
   /** Marriage timing windows: how many there are, and whether any rank above another. */
@@ -125,6 +127,25 @@ function d9Fact(d1: Dignity, d9: Dignity) {
 /** Rating reasons for the AI: "D1 Tula: neutral (compound friend)" → "D1 Tula: friend" (one dignity per planet, rule D1). */
 const compoundOnly = (reasons: string[]) =>
   reasons.map((r) => r.replace(/\b(?:friend|neutral|enemy)\s+\(compound (great friend|great enemy|friend|neutral|enemy)\)/g, "$1"));
+
+/** Lagna-dependent claims made tentative by a sensitive birth time: houses in that chart, its 7th / 10th and their lords. */
+function tentativeClaims(bt: BirthTimeCheck, mf: MarriageFactors, d10: CareerD10 | null): string[] {
+  const out: string[] = [];
+  if (bt.sensitive.d1) out.push("D1 Lagna and D1 house positions");
+  if (bt.sensitive.d9 && !bt.uninterpretable.d9)
+    out.push(`D9 Lagna (${rashi(mf.d9.lagnaSign)}), D9 house positions, the D9 7th house (${rashi(mf.d9.seventhSign)}) and its lord ${g(mf.d9.seventhLord)} as D9 7th lord`);
+  if (d10 && bt.sensitive.d10 && !bt.uninterpretable.d10)
+    out.push(`D10 Lagna (${rashi(d10.lagnaSign)}), D10 house positions, the D10 10th house (${rashi(d10.tenthSign)}) and its lord ${g(d10.tenthLord)} as D10 10th lord`);
+  for (const k of ["d9", "d10"] as const) if (bt.uninterpretable[k]) out.push(`${k.toUpperCase()}: not interpreted (its Lagna changes within 2 minutes)`);
+  for (const k of ["d1", "d9", "d10"] as const) for (const p of bt.planetsSensitive[k]) out.push(`${g(p)}'s own ${k.toUpperCase()} sign and dignity there`);
+  return out;
+}
+
+/** What stays firm despite a sensitive Lagna: each planet's own varga sign, its dignity there and Vargottama. */
+function firmClaims(bt: BirthTimeCheck): string {
+  const moving = (["d1", "d9", "d10"] as const).flatMap((k) => bt.planetsSensitive[k].map((p) => `${g(p)}'s ${k.toUpperCase()} sign`));
+  return `Planets' own D9 / D10 signs, their dignities there and Vargottama are firm${moving.length ? `, except ${moving.join(", ")}` : ""}.`;
+}
 
 type KundliExtras = { manglik: Manglik | null; kaalSarp: KaalSarp | null; birthDate?: string };
 
@@ -222,6 +243,8 @@ export function kundliFacts(chart: Chart, dasha: DashaCurrent, extras: KundliExt
       d1_vs_d9: mf.comparison,
       significators: [...sig.primary].map(([p, why]) => ({ graha: g(p), as: why })),
       timing_windows_count: windows.length,
+      // Windows use the D1 Lagna and the Dashas: tentative only when the D1 Lagna is sensitive.
+      timing_windows_tentative: Boolean(bt?.sensitive.d1),
       // Windows differ in rank only by whether both Dasha lords are significators; nothing else ranks them.
       timing_windows_ranked: windowsRanked,
       timing_windows_shorter_than_30_days_left_out: brief.length,
@@ -238,13 +261,16 @@ export function kundliFacts(chart: Chart, dasha: DashaCurrent, extras: KundliExt
     },
     ...(d10
       ? {
-          career_d10: {
-            d10_lagna: rashi(d10.lagnaSign),
-            d10_10th: rashi(d10.tenthSign),
-            d10_10th_lord: g(d10.tenthLord),
-            planets_in_d10: d10.planets.map((p) => ({ graha: g(p.name), d10_rashi: rashi(p.sign), dignity: p.fact })),
-            ...(bt?.sensitive.d10 ? { birth_time_sensitive: bt.notesBy.d10 } : {}),
-          },
+          // A D10 whose Lagna changes within 2 minutes is shown on the page but not interpreted.
+          career_d10: bt?.uninterpretable.d10
+            ? { d10_lagna: rashi(d10.lagnaSign), not_interpreted: true }
+            : {
+                d10_lagna: rashi(d10.lagnaSign),
+                d10_10th: rashi(d10.tenthSign),
+                d10_10th_lord: g(d10.tenthLord),
+                planets_in_d10: d10.planets.map((p) => ({ graha: g(p.name), d10_rashi: rashi(p.sign), dignity: p.fact })),
+                ...(bt?.sensitive.d10 ? { lagna_dependent_claims_tentative: bt.notesBy.d10 } : {}),
+              },
         }
       : {}),
     ...(bt
@@ -255,6 +281,9 @@ export function kundliFacts(chart: Chart, dasha: DashaCurrent, extras: KundliExt
             minutes_until_d10_lagna_changes: { earlier: Math.floor(bt.d10.earlier), later: Math.floor(bt.d10.later) },
             warning: bt.warn,
             notes: bt.notes,
+            // Only claims that depend on a sensitive chart's Lagna are tentative; planets' own signs are firm.
+            tentative: tentativeClaims(bt, mf, d10),
+            firm: firmClaims(bt),
           },
         }
       : {}),
@@ -295,7 +324,11 @@ export function kundliFacts(chart: Chart, dasha: DashaCurrent, extras: KundliExt
       traditionally_active_in: y.nabhasa ? "throughout life (Nabhasa yoga)" : y.windows.map(windowFact),
     })),
     yogas_not_present: absent.map((a) => a.name),
-    shared_links: sharedLinks(present).map((l) => ({ planets: l.planets.map(graha), yogas: l.yogas, note: "these yogas rest on the same planetary link; count it as one support" })),
+    shared_links: sharedLinks(present, chart).map((l) => ({
+      yogas: l.yogas,
+      ...(l.placement ? { same_placement: `${graha(l.placement.planet)} in ${l.placement.sign}` } : { same_planets: l.planets.map(graha) }),
+      note: "these yogas rest on the same support; count it as one",
+    })),
     doshas: doshaCards.map(doshaFact),
     dasha: {
       as_of: dateOnly(asOf),
@@ -312,6 +345,10 @@ export function kundliFacts(chart: Chart, dasha: DashaCurrent, extras: KundliExt
 
   const ctx: ValidationContext = {
     placements: placementsOf(chart),
+    transitPlacements: [...new Set((["Saturn", "Jupiter"] as const).flatMap((p) => slowTransits(chart, asOf, p).map((x) => `${p}|${rashi(x.sign)}`)))].map((k) => {
+      const [graha, r] = k.split("|");
+      return { graha, rashi: r };
+    }),
     dasha: {
       mahadashaLords: timeline.map((p) => p.lord),
       antardashaLords: [...new Set(adTable.map((a) => a.lord))],
@@ -329,7 +366,7 @@ export function kundliFacts(chart: Chart, dasha: DashaCurrent, extras: KundliExt
         .map((s) => [s.name, { d1: dignityFact(s.dignity!), d9: dignityFact(s.d9Dignity!), d10: d10Fact(chart, s.name) }]),
     ),
     windows: { count: windows.length, ranked: windowsRanked },
-    ...(bt ? { birthTimeSensitive: { d9: bt.sensitive.d9, d10: bt.sensitive.d10 } } : {}),
+    ...(bt ? { birthTimeSensitive: { d9: bt.sensitive.d9 && !bt.uninterpretable.d9, d10: bt.sensitive.d10 && !bt.uninterpretable.d10, planets: [...new Set([...bt.planetsSensitive.d9, ...bt.planetsSensitive.d10])] } } : {}),
     cancelledDoshas: doshaCards.filter((c) => c.status === "cancelled").flatMap((c) => ratingEntry(c.key, c.name, c.rating, "dosha").names),
   };
   return { facts, ctx };
