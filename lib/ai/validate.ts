@@ -4,6 +4,16 @@
 import { DOSHAS, GRAHAS, KOOTS, RASHIS, YOGA_CHECKLIST } from "../glossary";
 import type { ValidationContext } from "./facts";
 
+/**
+ * Problems with wording rather than facts (how often "tentative" or
+ * "borderline" is said, method wording, an ambiguous rating phrase, ranking
+ * words). They are sent back for a rewrite like any problem, but a last
+ * attempt with only these is accepted (lib/ai/reading.ts): a correct reading
+ * is never thrown away over style.
+ */
+export const STYLE = "[style] ";
+export const isStyleProblem = (p: string) => p.startsWith(STYLE);
+
 const ORDINALS = ["first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth", "ninth", "tenth", "eleventh", "twelfth"];
 
 const EXTRA_GRAHA_ALIASES: Record<string, string> = {
@@ -196,7 +206,7 @@ function checkRatings(text: string, ratings: NonNullable<ValidationContext["rati
     const ratedAs = (key: string) => ratings.some((r) => r.key === key && r.rating === normRating(m));
     if (!owner && shared.size > 1 && [...shared].every(ratedAs)) continue;
     if (!owner) {
-      problems.push(`Rating "${m[0]}" must clearly belong to one Yoga or Dosha (name it just before the rating)`);
+      problems.push(`${STYLE}Rating "${m[0]}" must clearly belong to one Yoga or Dosha (name it just before the rating)`);
       continue;
     }
     const mine = ratings.filter((r) => r.key === owner);
@@ -270,14 +280,14 @@ export function validateReading(output: unknown, ctx: ValidationContext): string
         sentences.some((x) => [...x.matchAll(new RegExp(re.source, "gi"))].some((m) => LAGNA_DEP_RE.test(x.slice(Math.max(0, m.index! - 30), m.index! + m[0].length + 30))));
       const caveat = TENTATIVE_RE.test(value);
       for (const [chart, re, on] of [["D9", D9_RE, bt.d9], ["D10", D10_RE, bt.d10]] as const) {
-        if (on && !caveat && dependent(re)) problems.push(`${field}: ${chart} Lagna-dependent claims (houses, 7th / 10th and their lords) need "tentative" in this field`);
+        if (on && !caveat && dependent(re)) problems.push(`${STYLE}${field}: ${chart} Lagna-dependent claims (houses, 7th / 10th and their lords) need "tentative" in this field`);
       }
       const count = (value.match(/tentativ/gi) ?? []).length;
-      if (count > 1) problems.push(`${field}: say "tentative" once per section, on the specific claim (${count} times)`);
+      if (count > 1) problems.push(`${STYLE}${field}: say "tentative" once per section, on the specific claim (${count} times)`);
       for (const x of sentences) {
         if (!/tentativ/i.test(x) || LAGNA_DEP_RE.test(x)) continue;
         const firm = [...x.matchAll(FIRM_CLAIM_RE)].map((m) => planetNear(x, m.index!)).find((p) => p && !(bt.planets ?? []).includes(p));
-        if (firm) problems.push(`"${x.slice(0, 80)}": ${firm}'s own varga sign and dignity are firm; do not call them tentative`);
+        if (firm) problems.push(`${STYLE}"${x.slice(0, 80)}": ${firm}'s own varga sign and dignity are firm; do not call them tentative`);
       }
     }
   }
@@ -293,7 +303,7 @@ export function validateReading(output: unknown, ctx: ValidationContext): string
 
     // Methodology wording stays out of the reading (rule E8).
     const meta = sentence.match(META_RE) ?? sentence.match(META_CASED_RE);
-    if (meta) problems.push(`"${meta[0]}" describes the method; keep methodology in the footnotes`);
+    if (meta) problems.push(`${STYLE}"${meta[0]}" describes the method; keep methodology in the footnotes`);
 
     // A Dig bala claim must be about a planet whose strength factors list it (rule E1).
     if (ctx.digBalaFactor && DIG_CLAIM_RE.test(sentence)) {
@@ -333,7 +343,7 @@ export function validateReading(output: unknown, ctx: ValidationContext): string
         if (n !== ctx.windows.count) problems.push(`"${m[0]}": there are ${ctx.windows.count} timing windows`);
       }
       if (!ctx.windows.ranked && /\bwindows?\b/i.test(sentence) && RANK_WORD_RE.test(sentence))
-        problems.push(`"${sentence.slice(0, 80)}" ranks timing windows, but none ranks above another`);
+        problems.push(`${STYLE}"${sentence.slice(0, 80)}" ranks timing windows, but none ranks above another`);
     }
 
     // "Borderline" once per planet, where its rating first matters (rule E7).
@@ -407,7 +417,7 @@ export function validateReading(output: unknown, ctx: ValidationContext): string
       }
     }
   }
-  for (const [api, n] of borderline) if (n > 1) problems.push(`${api} is called borderline ${n} times; say it once, where its rating first matters`);
+  for (const [api, n] of borderline) if (n > 1) problems.push(`${STYLE}${api} is called borderline ${n} times; say it once, where its rating first matters`);
 
   // 6. Dates: every date must be one that appears in FACTS (or a birth date).
   if (ctx.allowedDates) problems.push(...checkDates(collectStrings(output).join("\n"), ctx.allowedDates));

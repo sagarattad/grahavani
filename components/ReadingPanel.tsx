@@ -6,7 +6,11 @@ import { useRef } from "react";
 import { READING_CARDS, type ReadingKind } from "@/lib/ai/schemas";
 import { TurnstileBox } from "./TurnstileBox";
 
-type Status = "idle" | "streaming" | "retrying" | "done" | "failed" | "error";
+type Status = "idle" | "streaming" | "retrying" | "recovering" | "done" | "failed" | "error";
+
+// After a dropped stream, ask for the saved reading every 10 s for up to 2 minutes.
+const RECOVER_TRIES = 12;
+const RECOVER_EVERY_MS = 10_000;
 type Reading = Record<string, unknown>;
 type KootItem = { koot?: string; earned?: number; max?: number; explanation?: string };
 
@@ -18,6 +22,31 @@ export function ReadingPanel({ kind, slug }: { kind: ReadingKind; slug: string }
   const [error, setError] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const turnstile = useRef<TurnstileInstance | null>(null);
+
+  /** The connection dropped: the server may still finish and save the reading, so look for it. */
+  async function recover() {
+    setReading(null);
+    setStatus("recovering");
+    for (let i = 0; i < RECOVER_TRIES; i++) {
+      await new Promise((r) => setTimeout(r, RECOVER_EVERY_MS));
+      try {
+        const res = await fetch("/api/reading", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ kind, slug, language: "en", cachedOnly: true }),
+        });
+        if (res.ok) {
+          setReading((await res.json()).output);
+          return setStatus("done");
+        }
+        if (res.status !== 404) break;
+      } catch {
+        // still offline: keep waiting
+      }
+    }
+    setError("The connection dropped before the reading was confirmed. Please try again.");
+    setStatus("error");
+  }
 
   async function getReading() {
     setStatus("streaming");
@@ -69,15 +98,10 @@ export function ReadingPanel({ kind, slug }: { kind: ReadingKind; slug: string }
           }
         }
       }
-      // The server was cut off (e.g. its time limit) before the final event.
-      if (!finished) {
-        setReading(null);
-        setError("The reading was interrupted. Please try again.");
-        setStatus("error");
-      }
+      // The stream ended before the final event (connection dropped or the server was cut off).
+      if (!finished) await recover();
     } catch {
-      setError("Network error while getting the reading.");
-      setStatus("error");
+      await recover();
     }
   }
 
@@ -100,6 +124,9 @@ export function ReadingPanel({ kind, slug }: { kind: ReadingKind; slug: string }
         </div>
       )}
       {status === "retrying" && <p className="text-sm text-warn">{t("rechecking")}</p>}
+      {status === "recovering" && (
+        <p className="text-sm text-warn">The connection dropped. Checking whether the reading was finished and saved…</p>
+      )}
       {status === "failed" && <p className="rounded-lg bg-warn-bg px-3 py-2 text-sm">{t("readingFailed")}</p>}
       {status === "streaming" && !reading && <p className="text-sm text-muted">Writing your reading…</p>}
 

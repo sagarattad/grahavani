@@ -8,7 +8,7 @@ import { currentMonth } from "../rateLimit";
 import { AI_MODELS, MODEL_SETTINGS, PROMPT_VERSION, estimateCost } from "@/config/ai";
 import { SYSTEM_PROMPT, TASK_PROMPTS } from "./prompts";
 import { READING_SCHEMAS, followupSchema, type ReadingKind } from "./schemas";
-import { validateReading } from "./validate";
+import { STYLE, isStyleProblem, validateReading } from "./validate";
 import type { ValidationContext } from "./facts";
 import { GRAHAS, KOOTS, RASHIS, TERMS } from "../glossary";
 import { isGemini } from "./models";
@@ -82,6 +82,9 @@ type Link = { birthChartId?: string; manglikResultId?: string; milanResultId?: s
  * the facts; on failure we retry once, then give up (the page keeps the data).
  * Only validated readings are cached.
  */
+/** Attempts per reading: the first, then rewrites with the validator's feedback (each ~40–60 s; the route allows 300 s). */
+const ATTEMPTS = 3;
+
 export function streamReading(opts: {
   kind: ReadingKind;
   facts: unknown;
@@ -95,11 +98,30 @@ export function streamReading(opts: {
 
   return new ReadableStream({
     async start(controller) {
-      const send = (e: ReadingEvent) => controller.enqueue(enc.encode(JSON.stringify(e) + "\n"));
+      // If the browser disconnects, keep going: the reading is still checked and saved,
+      // and the panel picks it up from the cache (ReadingPanel's recovery).
+      let open = true;
+      const send = (e: ReadingEvent) => {
+        if (!open) return;
+        try {
+          controller.enqueue(enc.encode(JSON.stringify(e) + "\n"));
+        } catch {
+          open = false;
+        }
+      };
+      const close = () => {
+        if (!open) return;
+        open = false;
+        try {
+          controller.close();
+        } catch {
+          // already closed by a disconnect
+        }
+      };
       let feedback = "";
       try {
-        for (let attempt = 0; attempt < 2; attempt++) {
-          if (attempt === 1) send({ type: "retry" });
+        for (let attempt = 0; attempt < ATTEMPTS; attempt++) {
+          if (attempt > 0) send({ type: "retry" });
           const result = streamText({
             model: openai(model),
             system: SYSTEM_PROMPT,
@@ -123,7 +145,10 @@ export function streamReading(opts: {
           const cost = await recordUsage(model, usage.inputTokens ?? 0, usage.outputTokens ?? 0);
 
           const problems = validateReading(output, ctx);
-          if (problems.length === 0) {
+          // On the last attempt, wording-only problems do not discard a factually correct reading.
+          const last = attempt === ATTEMPTS - 1;
+          if (problems.length && last && problems.every(isStyleProblem)) console.warn("ai_style_accepted", kind, problems);
+          if (problems.length === 0 || (last && problems.every(isStyleProblem))) {
             await db.aiReading.upsert({
               where: { cacheKey },
               create: {
@@ -142,13 +167,13 @@ export function streamReading(opts: {
               update: {},
             });
             send({ type: "done", data: output });
-            controller.close();
+            close();
             return;
           }
           console.warn("ai_validation_failed", kind, problems);
           feedback =
             "\n\nYour previous answer contained statements that do not match FACTS:\n- " +
-            problems.join("\n- ") +
+            problems.map((p) => p.replace(STYLE, "")).join("\n- ") +
             "\nRewrite it using only values from FACTS.";
         }
         send({ type: "failed" });
@@ -156,7 +181,7 @@ export function streamReading(opts: {
         console.error("ai_reading_error", e);
         send({ type: "failed" });
       }
-      controller.close();
+      close();
     },
   });
 }
@@ -171,10 +196,12 @@ export async function answerFollowup(opts: { facts: unknown; ctx: ValidationCont
     ...providerOptions(model),
   });
   await recordUsage(model, totalUsage.inputTokens ?? 0, totalUsage.outputTokens ?? 0);
+  // A single attempt: wording-only problems are logged, not fatal.
   const problems = validateReading(output, opts.ctx);
-  if (problems.length > 0) {
+  if (problems.length > 0 && !problems.every(isStyleProblem)) {
     console.warn("ai_followup_validation_failed", problems);
     return null;
   }
+  if (problems.length) console.warn("ai_style_accepted", "followup", problems);
   return output;
 }

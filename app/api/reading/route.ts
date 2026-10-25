@@ -5,7 +5,7 @@ import { factsFor } from "@/lib/targets";
 import { aiBudgetLeft, readingCacheKey, streamReading } from "@/lib/ai/reading";
 import { clientIpHash, jsonError, verifyTurnstile, withinCap } from "@/lib/request";
 
-// Two attempts (one retry after a failed check) can take about 90 s each with the v8 facts.
+// Up to three attempts (rewrites after a failed check), about 40–60 s each.
 export const maxDuration = 300;
 
 const body = z.object({
@@ -13,12 +13,15 @@ const body = z.object({
   slug: z.string().min(10).max(40),
   language: z.enum(["en"]).default("en"),
   turnstileToken: z.string().nullish(),
+  // Only return a reading that is already saved (never start one): the panel uses
+  // this when a stream dropped, since the server may have finished and saved it.
+  cachedOnly: z.boolean().optional(),
 });
 
 export async function POST(req: Request) {
   const parsed = body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return jsonError(400, "Bad request");
-  const { kind, slug, language, turnstileToken } = parsed.data;
+  const { kind, slug, language, turnstileToken, cachedOnly } = parsed.data;
 
   const target = await factsFor(kind, slug);
   if (!target) return jsonError(404, "Not found");
@@ -26,6 +29,7 @@ export async function POST(req: Request) {
   const { cacheKey } = readingCacheKey(kind, target.facts, language);
   const cached = await db.aiReading.findUnique({ where: { cacheKey } });
   if (cached) return Response.json({ cached: true, output: cached.output });
+  if (cachedOnly) return jsonError(404, "Not saved yet");
 
   if (!process.env.OPENAI_API_KEY) return jsonError(503, "Readings are not set up yet.");
   if (!(await verifyTurnstile(turnstileToken))) return jsonError(403, "Please complete the human check again.");

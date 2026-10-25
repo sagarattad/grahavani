@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { checkDates, validateReading } from "./validate";
+import { checkDates, isStyleProblem, validateReading } from "./validate";
 import { kundliFacts, manglikFacts, milanFacts } from "./facts";
 import { refusalTopic } from "./refusal";
 import { loadKaalSarpFixtures, loadKundliFixtures, loadManglikFixtures, loadMilanFixtures } from "../../tests/fixtures";
@@ -338,6 +338,14 @@ describe("evidence rules (Oct 2026 review)", () => {
     const t = kundliCtx.transitPlacements!.find((p) => p.graha === "Jupiter" && !kundliCtx.placements.some((q) => q.graha === "Jupiter" && q.rashi === p.rashi))!;
     expect(check(`The window has a double transit, with Guru in ${t.rashi}.`)).toEqual([]);
     expect(check(`Guru in ${t.rashi} gives wisdom.`).join()).toMatch(/not in the computed facts/);
+  });
+
+  it("wording problems are marked as style; factual ones are not (a last attempt with style-only problems is kept)", () => {
+    const style = validateReading({ personality: "Chandra is borderline.", summary: "Chandra is borderline. Sarvashtakavarga is not computed." }, placementCtx);
+    expect(style.length).toBeGreaterThan(0);
+    expect(style.every(isStyleProblem)).toBe(true);
+    const fact = validateReading({ personality: "Mars in Mesha makes you bold." }, placementCtx);
+    expect(fact.some((p) => !isStyleProblem(p))).toBe(true);
   });
 
   it("window count and ranking follow FACTS (rule W1)", () => {
