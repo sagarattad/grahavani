@@ -33,6 +33,17 @@ describe("About items", () => {
     expect(m.details.join()).not.toMatch(/Cancellation/);
   });
 
+  it("About wording: no 'intensity is:', no 'its intensity: X because', no chart-note references", () => {
+    const keys = ["manglik"];
+    const out = (about: string) => ({ items: [{ key: "manglik", about }] });
+    const v = (t: string) => validateAbout(out(t), keys, ctx, items).join();
+    expect(v("Its intensity is: Medium in this chart.")).toMatch(/state the rating as its own sentence/);
+    expect(v("Its intensity: Medium because Mars is strong.")).toMatch(/state the rating as its own sentence/);
+    expect(v("As the chart's own note says, it is mild.")).toMatch(/do not refer to the chart's notes/);
+    expect(v("In this chart it carries intensity: Medium.")).toMatch(/state the rating as its own sentence/);
+    expect(v("In this chart it has intensity: Medium.")).toMatch(/state the rating as its own sentence/);
+  });
+
   it("a running transit dosha names its phase, without dates", () => {
     const details = items.find((i) => i.key === "dhaiya")!.details;
     expect(details.at(-1)).toBe("Running phase: Ashtama Shani (8th from Chandra)");
@@ -105,7 +116,7 @@ describe("About ratings", () => {
     const ruchaka = items.find((i) => i.key === "yoga.ruchaka")!;
     expect(ruchaka.rating).toBe("rated Moderate"); // Mars strong, one level lower for the Bhanga
     expect(ruchaka.rating_reasons.join()).toMatch(/Bhanga/);
-    expect(items.find((i) => i.key === "manglik")!.rating).toBe("intensity: Medium"); // 7th from Lagna, 4th from Moon, own sign −1
+    expect(items.find((i) => i.key === "manglik")!.rating).toBe("Medium intensity"); // 7th from Lagna, 4th from Moon, own sign −1
     expect(items.find((i) => i.key === "nabhasa.pasha")!.rating).toBe("not rated");
   });
 
@@ -125,6 +136,6 @@ describe("About ratings", () => {
 
   it("Gun Milan Nadi / Bhakoot items carry their intensity", () => {
     const milan = loadMilanFixtures().find((f) => f.file.includes("nadi-cancelled"))!;
-    expect(milanAboutItems(milan).find((i) => i.key === "nadiDosha")!.rating).toBe("intensity: Low");
+    expect(milanAboutItems(milan).find((i) => i.key === "nadiDosha")!.rating).toBe("Low intensity");
   });
 });

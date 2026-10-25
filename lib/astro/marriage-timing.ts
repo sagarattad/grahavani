@@ -82,8 +82,22 @@ export function marriageWindows(chart: Chart, asOf: string, limit = 6): Marriage
   return marriageTiming(chart, asOf, limit).windows;
 }
 
-/** The windows, plus the overlaps left out for being shorter than MIN_WINDOW_DAYS. */
-export function marriageTiming(chart: Chart, asOf: string, limit = 6): { windows: MarriageWindow[]; brief: MarriageWindow[] } {
+/**
+ * One plain sentence on the Dasha side of the windows, when it is the same for
+ * all of them: "Neither window has both Dasha lords as significators." Null when
+ * some windows have both and some do not (each window says so itself).
+ */
+export function windowsLordsNote(windows: MarriageWindow[]): string | null {
+  const n = windows.length;
+  if (!n) return null;
+  const both = windows.filter((w) => w.rank === "MD and AD").length;
+  if (both === 0) return n === 1 ? "The window does not have both Dasha lords as significators." : n === 2 ? "Neither window has both Dasha lords as significators." : "None of the windows has both Dasha lords as significators.";
+  if (both === n) return n === 1 ? "The window has both Dasha lords as significators." : n === 2 ? "Both windows have both Dasha lords as significators." : "Every window has both Dasha lords as significators.";
+  return null;
+}
+
+/** The first `limit` windows, how many there are in all, and the overlaps left out for being shorter than MIN_WINDOW_DAYS. */
+export function marriageTiming(chart: Chart, asOf: string, limit = 6): { windows: MarriageWindow[]; total: number; brief: MarriageWindow[] } {
   const { timeline } = chart.vimshottari;
   const now = ms(asOf);
   const i = Math.max(timeline.findIndex((p) => contains(p, now)), 0);
@@ -133,5 +147,6 @@ export function marriageTiming(chart: Chart, asOf: string, limit = 6): { windows
   // A few days or weeks between retrograde ingresses is not a usable window.
   const long = (w: MarriageWindow) => ms(w.end) - ms(w.start) >= MIN_WINDOW_DAYS * 86400_000;
   const sorted = out.sort((x, y) => ms(x.start) - ms(y.start));
-  return { windows: sorted.filter(long).slice(0, limit), brief: sorted.filter((w) => !long(w)) };
+  const all = sorted.filter(long);
+  return { windows: all.slice(0, limit), total: all.length, brief: sorted.filter((w) => !long(w)) };
 }

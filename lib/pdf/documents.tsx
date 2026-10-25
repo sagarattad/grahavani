@@ -18,7 +18,7 @@ import { nearNakshatraBoundary, nearSignBoundary } from "../accuracy";
 import { MANGLIK_CHECKS, comparedText, doshaState, manglikCombined, manglikStatus, sortKoots } from "../summaries";
 import { sharedLinkText, sharedLinks, yogaChecklist } from "../yogas";
 import { windowText, windowsText } from "../periods";
-import { rangeText, type DoshaCard } from "../doshas";
+import { rangeText, saturnReturnLines, type DoshaCard } from "../doshas";
 import { ABOUT_DOSHA_STATUSES, type AboutTexts } from "../ai/about";
 import { PARTIAL_POINTS_NOTE, RATING_NOTE, rateKootDosha, type Rating } from "../strength";
 import { chartStrengths } from "../astro/planet-strength";
@@ -27,7 +27,7 @@ import { functionalNature } from "../astro/functional";
 import { ownHouseLords } from "../astro/rules";
 import { atmakaraka, marriageFactors } from "../astro/marriage";
 import { MIN_WINDOW_DAYS, marriageTiming } from "../astro/marriage-timing";
-import { birthTimeCheck, careerD10, transitOverlaps } from "../astro/timing-checks";
+import { birthTimeCheck, careerD10, transitOverlaps, vargaCaveat } from "../astro/timing-checks";
 import { readDashaLord } from "../astro/dasha-lords";
 import { groupYogas } from "../yogas";
 import type { Attribution, Chart, DashaCurrent, Koot, Manglik, Milan } from "../kundlit-schemas";
@@ -185,6 +185,11 @@ export function KundliPdf({ person, chart, dasha, doshas, about, attribution, re
             ))}
           </>
         )}
+        {saturnReturnLines(chart, dasha.as_of).map((l) => (
+          <Text key={l} style={[s.small, { marginTop: 3 }]}>
+            {l}
+          </Text>
+        ))}
         <Text style={s.h3}>Jupiter transits</Text>
         <Text style={s.small}>
           Jupiter is in {rashi(transits.jupiterNow.sign)} now: house {transits.jupiterNow.fromMoon} from the Moon, {transits.jupiterNow.fromLagna} from the Lagna. Classically
@@ -503,7 +508,7 @@ function RatingText({ rating, label }: { rating: Rating<string>; label: string }
 /** Marriage (D1 and Navamsa, Darakaraka, Upapada) and career (D10) factors. */
 function PdfMarriageCareer({ chart, asOf }: { chart: Chart; asOf: string }) {
   const m = marriageFactors(chart);
-  const { windows, brief } = marriageTiming(chart, asOf);
+  const { windows, total, brief } = marriageTiming(chart, asOf);
   const d10 = careerD10(chart);
   const bt = birthTimeCheck(chart, rashi);
   return (
@@ -511,9 +516,7 @@ function PdfMarriageCareer({ chart, asOf }: { chart: Chart; asOf: string }) {
       {bt && (bt.sensitive.d1 || bt.sensitive.d9) && (
         <Text style={[s.small, { color: C.warn }]}>
           {[...bt.notesBy.d1, ...bt.notesBy.d9].join(" ")}{" "}
-          {bt.uninterpretable.d9
-            ? "The D9 is shown but not interpreted: its Lagna changes within 2 minutes of the birth time."
-            : "Claims that depend on the D9 Lagna (its houses, the 7th and its lord) are tentative; planets' own D9 signs are firm."}
+          {vargaCaveat(bt, "d9", m.d9.lagnaSign, graha)}
         </Text>
       )}
       <KeyValues
@@ -531,7 +534,7 @@ function PdfMarriageCareer({ chart, asOf }: { chart: Chart; asOf: string }) {
                   ? [
                       [
                         "Birth time (D10)",
-                        `${bt.notesBy.d10.join(" ")} ${bt.uninterpretable.d10 ? "The D10 is shown but not interpreted: its Lagna changes within 2 minutes of the birth time." : "Claims that depend on the D10 Lagna (its houses, the 10th and its lord) are tentative; planets' own D10 signs are firm."}`,
+                        `${bt.notesBy.d10.join(" ")} ${vargaCaveat(bt, "d10", d10.lagnaSign, graha)}`,
                       ],
                     ]
                   : []),
@@ -547,7 +550,7 @@ function PdfMarriageCareer({ chart, asOf }: { chart: Chart; asOf: string }) {
           • {c}
         </Text>
       ))}
-      <Text style={s.h3}>Traditional timing windows</Text>
+      <Text style={s.h3}>Traditional timing windows{total ? ` (${total === windows.length ? total : `the first ${windows.length} of ${total}`})` : ""}</Text>
       {windows.length ? (
         windows.map((w) => (
           <Text key={w.start} style={s.small}>

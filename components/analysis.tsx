@@ -11,11 +11,13 @@ import { MIN_WINDOW_DAYS, marriageSignificators, marriageTiming } from "@/lib/as
 import {
   birthTimeCheck,
   careerD10,
+  vargaCaveat,
   transitOverlaps,
 } from "@/lib/astro/timing-checks";
 import { readDashaLord } from "@/lib/astro/dasha-lords";
 import { dignityText } from "@/lib/astro/relations";
 import { groupYogas } from "@/lib/yogas";
+import { saturnReturnLines } from "@/lib/doshas";
 import type { Chart, DashaCurrent } from "@/lib/kundlit-schemas";
 
 const list = (xs: string[]) => (xs.length ? xs.map(graha).join(", ") : "none");
@@ -91,16 +93,14 @@ export function MarriageCareerSection({ chart, asOf }: { chart: Chart; asOf: str
   const d10 = careerD10(chart);
   const bt = birthTimeCheck(chart, rashi);
   const sig = marriageSignificators(chart);
-  const { windows, brief } = marriageTiming(chart, asOf);
+  const { windows, total, brief } = marriageTiming(chart, asOf);
   return (
     <Section title="Marriage and career factors (D9 / D10)">
       <h3 className="mb-2 text-sm font-bold">Marriage (D1 and Navamsa)</h3>
       {bt && (bt.sensitive.d1 || bt.sensitive.d9) && (
         <p className="mb-2 rounded-lg bg-warn-bg px-3 py-2 text-xs text-warn">
           {[...bt.notesBy.d1, ...bt.notesBy.d9].join(" ")}{" "}
-          {bt.uninterpretable.d9
-            ? "The D9 is shown but not interpreted: its Lagna changes within 2 minutes of the birth time."
-            : "Claims that depend on the D9 Lagna (its houses, the 7th and its lord) are tentative; planets' own D9 signs are firm."}
+          {vargaCaveat(bt, "d9", m.d9.lagnaSign, graha)}
         </p>
       )}
       <Rows
@@ -136,6 +136,7 @@ export function MarriageCareerSection({ chart, asOf }: { chart: Chart; asOf: str
       </ul>
       <h3 className="mb-1 mt-4 text-sm font-bold">
         Traditional timing windows
+        {total ? ` (${total === windows.length ? total : `the first ${windows.length} of ${total}`})` : ""}
       </h3>
       {windows.length ? (
         <ul className="space-y-2 text-sm">
@@ -179,9 +180,7 @@ export function MarriageCareerSection({ chart, asOf }: { chart: Chart; asOf: str
       {d10 && bt?.sensitive.d10 && (
         <p className="mb-2 rounded-lg bg-warn-bg px-3 py-2 text-xs text-warn">
           {bt.notesBy.d10.join(" ")}{" "}
-          {bt.uninterpretable.d10
-            ? "The D10 is shown but not interpreted: its Lagna changes within 2 minutes of the birth time."
-            : "Claims that depend on the D10 Lagna (its houses, the 10th and its lord) are tentative; planets' own D10 signs are firm."}
+          {vargaCaveat(bt, "d10", d10.lagnaSign, graha)}
         </p>
       )}
       {d10 ? (
@@ -237,6 +236,7 @@ export function DashaLords({
     },
   ];
   const tr = transitOverlaps(chart, current.as_of);
+  const saturnReturn = saturnReturnLines(chart, current.as_of);
   return (
     <div className="mb-4">
       <h3 className="mb-2 text-sm font-bold">
@@ -268,6 +268,11 @@ export function DashaLords({
           </ul>
         </>
       )}
+      {saturnReturn.map((l) => (
+        <p key={l} className="mt-2 text-xs">
+          {l}
+        </p>
+      ))}
       <h3 className="mb-1 mt-3 text-sm font-bold">Jupiter transits</h3>
       <p className="mb-1 text-xs text-muted">
         Jupiter is in {rashi(tr.jupiterNow.sign)} now: house{" "}

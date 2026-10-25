@@ -21,6 +21,8 @@ export type Period = { lord: string; start: string; end: string };
 /** `fullStart`: where a sub-period clipped at birth would have begun (Kundlit reports this as its start). */
 export type SubPeriod = Period & { parent: string; fullStart?: string };
 
+import { MAX_ACTIVATION_AGE } from "@/config/astro";
+
 const ms = (iso: string) => new Date(iso).getTime();
 const iso = (t: number) => new Date(t).toISOString();
 
@@ -79,11 +81,14 @@ export type Window = { md: string; ad?: string; start: string; end: string; curr
 
 /**
  * Current and upcoming periods ruled by any of `lords`: whole Mahadashas, and
- * Antardashas inside the current and next Mahadasha. Sorted by start.
+ * Antardashas inside the current and next Mahadasha, up to MAX_ACTIVATION_AGE.
+ * Sorted by start.
  */
 export function activationWindows(lords: Iterable<string>, timeline: Period[], asOf: string, limit = 6): Window[] {
   const want = new Set(lords);
   const now = ms(asOf);
+  // Periods starting after MAX_ACTIVATION_AGE (config/astro.ts) are left out.
+  const lastStart = timeline.length ? ms(timeline[0].start) + MAX_ACTIVATION_AGE * 365.25 * 86400_000 : Infinity;
   const idx = timeline.findIndex((p) => contains(p, now));
   const out: Window[] = [];
   for (const md of timeline) {
@@ -96,5 +101,8 @@ export function activationWindows(lords: Iterable<string>, timeline: Period[], a
       }
     }
   }
-  return out.sort((a, b) => ms(a.start) - ms(b.start)).slice(0, limit);
+  return out
+    .filter((w) => ms(w.start) <= lastStart)
+    .sort((a, b) => ms(a.start) - ms(b.start))
+    .slice(0, limit);
 }

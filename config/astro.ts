@@ -6,3 +6,6 @@
  * - "varga": judged from their signs in that divisional chart.
  */
 export const TATKALIKA_BASIS: "d1" | "varga" = "d1";
+
+/** "When active" lists leave out Dasha periods that start after this age. */
+export const MAX_ACTIVATION_AGE = 90;

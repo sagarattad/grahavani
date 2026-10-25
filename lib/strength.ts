@@ -62,6 +62,7 @@ export function rateYoga(y: RatableYoga, chart: Chart, strengths: Map<string, Pl
   if (y.nabhasa) return yogaRating(null, ["Describes the overall pattern of the chart"]);
 
   const eighthLord = houseLords(chart.lagna.sign_num)[8];
+  let anyBlemished = false;
   let best: { idx: number; score: number; ps: PlanetStrength[]; blemish: string | null } | null = null;
   for (const c of y.combinations) {
     const others = c.participants.filter((p) => !NODES.has(p));
@@ -70,6 +71,7 @@ export function rateYoga(y: RatableYoga, chart: Chart, strengths: Map<string, Pl
     if (ps.length === 0 || ps.some((p) => !p)) return yogaRating(null, ["Data unavailable for this chart"]);
     const list = ps as PlanetStrength[];
     const blemish = y.key === "yoga.raja" && list.some((p) => p.name === eighthLord) ? `${graha(eighthLord)} also rules the 8th: blemished, one level lower` : null;
+    if (blemish) anyBlemished = true;
     const idx = Math.max(0, Math.floor(list.reduce((s, p) => s + LEVEL_INDEX[p.level], 0) / list.length + 1e-9) - (blemish ? 1 : 0));
     const score = list.reduce((s, p) => s + p.score, 0) / list.length;
     const better = !best || (best.blemish !== null && blemish === null) || ((best.blemish === null) === (blemish === null) && (idx > best.idx || (idx === best.idx && score > best.score)));
@@ -85,7 +87,8 @@ export function rateYoga(y: RatableYoga, chart: Chart, strengths: Map<string, Pl
     const avg = best.ps.reduce((s, p) => s + LEVEL_INDEX[p.level], 0) / best.ps.length;
     reasons.push(`${sum}: average ${Math.round(avg * 100) / 100}, rounded down → ${YOGA_LEVELS[Math.floor(avg + 1e-9)]}`);
   }
-  if (best.blemish) reasons.push(`${best.blemish} → ${YOGA_LEVELS[best.idx]}`);
+  if (best.blemish) reasons.push(`${best.blemish} → ${YOGA_LEVELS[best.idx]}${y.combinations.length > 1 ? " (every combination includes the 8th lord)" : ""}`);
+  else if (anyBlemished) reasons.push(`Rated on ${best.ps.map((p) => graha(p.name)).join("–")}, the unblemished combination`);
   const borderline = best.ps.filter((p) => p.borderline);
   if (borderline.length) reasons.push(`Borderline: depends on ${borderline.map((p) => `${graha(p.name)} (score ${p.score})`).join(" and ")}, close to a level threshold`);
   if (y.status === "cancelled") {
@@ -116,7 +119,7 @@ export function ratingContradictions(
 
 const doshaRating = (level: DoshaLevel | null, reasons: string[]): Rating<DoshaLevel> => ({
   level,
-  label: level ? `Intensity: ${level}` : "Not rated",
+  label: !level ? "Not rated" : level === "Cancelled" ? "Cancelled" : `${level} intensity`,
   reasons: reasons.slice(0, 4),
 });
 
@@ -175,12 +178,13 @@ export function rateKootDosha(k: Koot, cancellation: string | null): Rating<Dosh
 
 /**
  * The only form in which AI texts may state a rating ("rated Strong",
- * "intensity: Low"); lib/ai/validate.ts checks these phrases against FACTS.
+ * "Low intensity", or "cancelled"); lib/ai/validate.ts checks these phrases against FACTS.
  * English only: localise the phrases and the validator patterns together.
  */
 export function ratingPhrase(r: Rating<string>, kind: "yoga" | "dosha"): string {
   if (!r.level) return "not rated";
-  return kind === "yoga" ? `rated ${r.level}` : `intensity: ${r.level}`;
+  if (kind === "yoga") return `rated ${r.level}`;
+  return r.level === "Cancelled" ? "cancelled" : `${r.level} intensity`;
 }
 
 export type { Rating as StrengthRating };

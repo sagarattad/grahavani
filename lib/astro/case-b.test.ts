@@ -39,6 +39,23 @@ describe.skipIf(!present)("regression: case B (local-only fixture)", () => {
     expect(by("raja")!.rating.basis!.sort()).toEqual(ex.rajaBasis);
   });
 
+  it("Raj Yoga: blemished combinations are marked, and the reason says why the rated one was chosen", () => {
+    const r = by("raja")!;
+    const marked = r.combinations.filter((c) => c.claim.includes("(blemished:"));
+    expect(marked).toHaveLength(ex.round6.blemished_combinations);
+    for (const c of marked) expect(c.claim).toMatch(/— a Raj yoga \(blemished: \S+ rules the 8th\)\.$/);
+    expect(r.rating.reasons.join()).toContain(ex.round6.raja_reason);
+  });
+
+  it("birth time: the D9 7th lord recomputed under the neighbouring Lagna stays the same, so it is firm", async () => {
+    const { kundliFacts } = await import("../ai/facts");
+    const { facts } = kundliFacts(chart, chart.vimshottari.current, { manglik: null, kaalSarp: null });
+    const bt = facts.birth_time as { tentative: string[]; firm: string };
+    expect(bt.firm).toContain(ex.round7.d9_lord_firm);
+    expect(bt.tentative.join(" | ")).not.toMatch(/as D9 7th lord/);
+    expect((facts.marriage as Record<string, unknown>).timing_windows_note).toBe(ex.round7.windows_note);
+  });
+
   it("Nabhasa: the seven-house akriti yogas need seven occupied consecutive houses", () => {
     for (const k of ex.absentYogas) expect(ys.some((y) => y.key === k), k).toBe(false);
     for (const k of ex.presentNabhasa) expect(ys.some((y) => y.key === k), k).toBe(true);

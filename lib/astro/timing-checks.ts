@@ -100,6 +100,38 @@ export function birthTimeCheck(chart: Chart, signName: (n: number) => string): B
   return { rate, d1, d9, d10, warn: notes.length > 0, sensitive, uninterpretable, planetsSensitive, notes, notesBy };
 }
 
+/**
+ * A Lagna-dependent house lord (the D9 7th lord, the D10 10th lord) recomputed
+ * under each neighbouring Lagna the birth-time window reaches. `firm` when the
+ * same planet rules that house under all of them (the house sign itself still
+ * changes, so it stays tentative).
+ */
+export type LordCheck = { lord: Planet; neighbours: { lagna: number; lord: Planet }[]; firm: boolean };
+
+export function lagnaLordCheck(bt: BirthTimeCheck, chart: "d9" | "d10", lagnaSign: number, house: 7 | 10): LordCheck | null {
+  if (!bt.sensitive[chart] || bt.uninterpretable[chart]) return null;
+  const s = bt[chart];
+  const lordOf = (lagna: number) => SIGN_LORD[wrap(lagna + house - 1)];
+  const neighbours = [
+    ...(s.earlier < SENSITIVE_MINUTES ? [s.earlierSign] : []),
+    ...(s.later < SENSITIVE_MINUTES ? [s.laterSign] : []),
+  ].map((l) => ({ lagna: l, lord: lordOf(l) }));
+  const lord = lordOf(lagnaSign);
+  return { lord, neighbours, firm: neighbours.every((n) => n.lord === lord) };
+}
+
+/** The birth-time caveat shown beside the marriage (D9) or career (D10) block. */
+export function vargaCaveat(bt: BirthTimeCheck, chart: "d9" | "d10", lagnaSign: number, lordName: (p: string) => string): string {
+  const C = chart.toUpperCase();
+  if (bt.uninterpretable[chart]) return `The ${C} is shown but not interpreted: its Lagna changes within 2 minutes of the birth time.`;
+  const house = chart === "d9" ? 7 : 10;
+  const check = lagnaLordCheck(bt, chart, lagnaSign, house);
+  const tail = `planets' own ${C} signs are firm.`;
+  return check?.firm
+    ? `Claims that depend on the ${C} Lagna (its houses, the ${house}th house) are tentative; the ${house}th lord ${lordName(check.lord)} is the same under the neighbouring Lagna, so it is firm, and ${tail}`
+    : `Claims that depend on the ${C} Lagna (its houses, the ${house}th and its lord) are tentative; ${tail}`;
+}
+
 // ---------- D10 (career) ----------
 
 export type CareerD10 = {

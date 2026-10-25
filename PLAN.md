@@ -820,3 +820,19 @@ All in `lib/astro/rules.ts` and `lib/astro/manglik.ts`, replacing Kundlit's Neec
 - **Birth time**: only claims that depend on a sensitive chart's Lagna (its houses, its 7th / 10th and their lords) are tentative. A planet's own varga sign, dignity and Vargottama are firm unless the planet itself could change varga sign within 10 minutes (computed from each graha's fastest motion; in practice only the Moon). Marriage windows are tentative only when the D1 Lagna is. A chart whose Lagna changes within 2 minutes is shown but not interpreted. The D1 change is shown up to 30 minutes. The validator requires "tentative" once per section on a Lagna-dependent claim (the house / lord word next to the chart's name) and rejects it on a firm planet claim.
 - **Rules**: Neecha Bhanga adds the planet exalted in the debilitation sign in a kendra, and (tradition-dependent) the debilitated planet itself in a kendra; Neechabhanga Raj Yoga is partial when the planet is debilitated again in the D9. Budhaditya (Sun and Mercury together) is in the catalogue. The seven-house akriti yogas (Nauka, Kuta, Chhatra, Chapa, Ardhachandra) need seven occupied consecutive houses (Kundlit's looser versions are dropped). A Raj Yoga combination with the 8th lord is one level lower, and unblemished combinations win. The Moon is never combust (also for charts stored before this change). Shared links: yogas sharing a planet pair or resting on one planet's placement. When-active lists are complete (the page and PDF show 8, then "and N more").
 - **Validator**: transit sentences may name Saturn's and Jupiter's transit signs; "the chart names / gives" is method wording. `PROMPT_VERSION` v12, `ABOUT_PROMPT_VERSION` a10.
+
+## Implementation notes (25 Oct 2026): round 6 (small fixes)
+
+- Saturn over natal Saturn / Moon is listed under a Sade Sati or Dhaiya card only inside that card's periods; any other passage is a separate "Saturn return" line with the transits (page, PDF, FACTS).
+- "When active" lists leave out periods starting after `MAX_ACTIVATION_AGE` (90, `config/astro.ts`).
+- Raj Yoga: each combination with the 8th lord is marked "— blemished: … rules the 8th"; the reason line names the rated combination ("…, the unblemished combination").
+- About texts state the rating as its own sentence; the About validator rejects "intensity is: X", "its intensity: X because" and references to the chart's own notes. `ABOUT_PROMPT_VERSION` a11.
+- Marriage windows: FACTS give the total (`timing_windows_count`) and, when fewer are listed, `timing_windows_listed`; the reading states the total or "the first N of M", and the validator checks it. `PROMPT_VERSION` v13.
+- Validator: transit cues include "window", "influence" and "<planet> from <sign>"; a Lagna-dependent claim needs the house / Lagna / lord word attached to the chart's name.
+
+## Implementation notes (25 Oct 2026): cosmetic pass
+
+- Dosha ratings are written "Low / Medium / High intensity", and a cancelled one "is cancelled"; readings and About texts reject any "intensity: X" construction ("carries / has intensity: X", "intensity is: X"). Page and PDF chips read "Low intensity" / "Cancelled". `PROMPT_VERSION` v14, `ABOUT_PROMPT_VERSION` a12.
+- Blemished Raj Yoga bullets read "… — a Raj yoga (blemished: Shani rules the 8th)."
+- When all marriage windows agree on the Dasha side, FACTS give one sentence (`timing_windows_note`, e.g. "Neither window has both Dasha lords as significators."); "both Dasha lords are not significators" is rewritten.
+- The D9 7th lord and D10 10th lord are recomputed under the neighbouring Lagna(s) inside the sensitivity window (`lagnaLordCheck`): the same planet under all of them is firm (the house sign itself stays tentative); a different one is tentative. Facts, the birth-time box and the validator follow this.

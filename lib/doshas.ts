@@ -131,11 +131,24 @@ function natalSaturnLines(chart: Chart): string[] {
   return [`Natal Shani: lord of ${role.houses.map(ord).join(" and ")} (${nature}), in ${sat.sign}, ${dignityFact(d)}${sat.combust ? ", combust" : ""}`];
 }
 
-/** "Transiting Shani over natal Shani and Chandra (Meena): 29 Mar 2025 – 3 Jun 2027". */
-function overNatalLines(chart: Chart, asOf: string): string[] {
-  return saturnOverNatal(chart, asOf).map(
-    (o) => `Transiting Shani over natal ${o.over.map((n) => (n === "Saturn" ? "Shani" : "Chandra")).join(" and ")} (${rashi(o.sign)}): ${dateOnly(o.start)} – ${dateOnly(o.end)}`,
-  );
+const overlapsAny = (o: { start: string; end: string }, ranges: DateRange[]) => ranges.some((r) => t(o.start) < t(r.end) && t(r.start) < t(o.end));
+const overText = (o: ReturnType<typeof saturnOverNatal>[number]) =>
+  `Transiting Shani over natal ${o.over.map((n) => (n === "Saturn" ? "Shani" : "Chandra")).join(" and ")} (${rashi(o.sign)}): ${dateOnly(o.start)} – ${dateOnly(o.end)}`;
+
+/** Saturn over natal Saturn / Moon, only where it falls inside the card's own periods. */
+function overNatalLines(chart: Chart, asOf: string, ranges: DateRange[]): string[] {
+  return saturnOverNatal(chart, asOf).filter((o) => overlapsAny(o, ranges)).map(overText);
+}
+
+/**
+ * Saturn over natal Saturn outside every Sade Sati and Dhaiya period: a
+ * Saturn return in its own right, shown with the transits, not under a dosha.
+ */
+export function saturnReturnLines(chart: Chart, asOf: string): string[] {
+  const ranges = [...sadeSatiRanges(chart, asOf), ...dhaiyaRanges(chart, asOf)];
+  return saturnOverNatal(chart, asOf)
+    .filter((o) => !overlapsAny(o, ranges))
+    .map((o) => `Saturn return: Shani over natal Shani (${rashi(o.sign)}), ${dateOnly(o.start)} – ${dateOnly(o.end)}`);
 }
 
 /** Sade Sati from Saturn's locally computed transits (lib/astro/transits.ts), over the current and next Mahadasha. */
@@ -146,7 +159,7 @@ export function sadeSatiCard(chart: Chart, asOf: string): DoshaCard {
   return card("sadeSati", {
     status,
     statusLabel: running ? `Running now — ${running.label}` : status === "upcoming" ? `Not running now — next from ${dateOnly(ranges[0].start)}` : "Not running",
-    details: [...natalSaturnLines(chart), ...overNatalLines(chart, asOf)],
+    details: [...natalSaturnLines(chart), ...overNatalLines(chart, asOf, ranges)],
     windows: [],
     ranges,
     asOf,
@@ -160,7 +173,7 @@ export function dhaiyaCard(chart: Chart, asOf: string): DoshaCard {
   return card("dhaiya", {
     status,
     statusLabel: status === "running" ? "Running now" : status === "upcoming" ? `Not running now — next from ${dateOnly(ranges[0].start)}` : "Not running",
-    details: natalSaturnLines(chart),
+    details: [...natalSaturnLines(chart), ...overNatalLines(chart, asOf, ranges)],
     windows: [],
     ranges,
     asOf,

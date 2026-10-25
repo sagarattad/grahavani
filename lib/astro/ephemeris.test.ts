@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { lahiriAyanamsa, siderealLongitude, signStays } from "./ephemeris";
-import { MIN_WINDOW_DAYS, marriageSignificators, marriageWindows } from "./marriage-timing";
+import { MIN_WINDOW_DAYS, marriageSignificators, marriageWindows, windowsLordsNote } from "./marriage-timing";
 import { dhaiyaRanges, sadeSatiRanges, transitSpan } from "./transits";
 import { loadKundliFixtures, rawFixture } from "../../tests/fixtures";
 
@@ -61,6 +61,17 @@ describe.each(fx)("Saturn phases shown once per cycle: $file", ({ chart }) => {
         expect(Boolean(r.continuesBeyond)).toBe(ms(r.end) >= span.to);
       }
     }
+  });
+});
+
+describe("windowsLordsNote", () => {
+  const w = (rank: "MD and AD" | "AD only") => ({ start: "", end: "", period: "", rank, why: [], moonAlso: false, secondary: [] });
+  it("one sentence when all windows agree, none when they differ", () => {
+    expect(windowsLordsNote([w("AD only"), w("AD only")])).toBe("Neither window has both Dasha lords as significators.");
+    expect(windowsLordsNote([w("AD only"), w("AD only"), w("AD only")])).toBe("None of the windows has both Dasha lords as significators.");
+    expect(windowsLordsNote([w("MD and AD"), w("MD and AD")])).toBe("Both windows have both Dasha lords as significators.");
+    expect(windowsLordsNote([w("MD and AD"), w("AD only")])).toBeNull();
+    expect(windowsLordsNote([])).toBeNull();
   });
 });
 

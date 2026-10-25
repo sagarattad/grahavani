@@ -81,9 +81,11 @@ function collectStrings(v: unknown, out: string[] = []): string[] {
 
 // Ratings may only be stated in these fixed forms (see ratingPhrase in lib/strength.ts).
 // English only: localise together with the prompts when other languages are added.
-export const RATING_RE = /\b(?:rated\s+(strong|moderate|weak)|intensity:?\s+(high|medium|low|cancelled))\b/gi;
+export const RATING_RE = /\b(?:rated\s+(strong|moderate|weak)|(high|medium|low)\s+intensity)\b/gi;
+// The old "intensity: Low" form (and "carries / has intensity: …", "intensity is: …"): rejected; write "Low intensity" or "is cancelled".
+export const INTENSITY_COLON_RE = /\bintensity\s*(?:is\s*)?:\s*(?:high|medium|low|cancelled)\b|\bintensity\s+(?:of\s+)?(?:high|medium|low|cancelled)\b/i;
 const cap = (w: string) => w[0].toUpperCase() + w.slice(1).toLowerCase();
-export const normRating = (m: RegExpMatchArray) => (m[1] ? `rated ${cap(m[1])}` : `intensity: ${cap(m[2])}`);
+export const normRating = (m: RegExpMatchArray) => (m[1] ? `rated ${cap(m[1])}` : `${cap(m[2])} intensity`);
 
 // Grahavani's rating is not Shadbala. A sentence that mentions Shadbala together
 // with a rating word is rejected unless it says Shadbala is not covered.
@@ -113,15 +115,24 @@ const RESIDUAL_RE = /\b(not (?:fully )?(?:erased|removed|eliminated)|without (?:
 const TENTATIVE_RE = /tentativ|sensitive to (?:the )?(?:exact )?birth[- ]time|birth[- ]time[- ]sensitive|if the birth time is (?:exact|accurate)|depends? on (?:the )?exact birth time/i;
 
 // A sentence about transits ("double transit", "Shani aspecting from Mithuna").
-const TRANSIT_CUE_RE = /\btransit|aspecting from|aspects? from\b/i;
+const TRANSIT_CUE_RE = new RegExp(`\\btransit|\\bwindows?\\b|\\binfluenc|\\baspect\\w* from\\b|\\bfrom (?:${RASHI_RE})\\b`, "i");
 // Claims that depend on a chart's Lagna: its houses, its 7th / 10th and their lords.
 const LAGNA_DEP_RE = /\b(lagna|ascendant|house|bhava|7th|seventh|10th|tenth|lord)\b/i;
+// "D9 7th lord", "D9's 7th house", "Navamsa Lagna" (right after the chart's name) and
+// "7th house of the D9", "lord of the D9 7th" (just before it).
+const DEP_AFTER_RE = /^(?:['’]s)?\s+(?:chart\s+)?(?:lagna|ascendant|\d{1,2}(?:st|nd|rd|th)|seventh|tenth|house|bhava)\b/i;
+// "D9 7th lord" / "lord of the D9 7th": a claim about the lord only.
+const LORD_AFTER_RE = /^(?:['’]s)?\s+(?:\d{1,2}(?:st|nd|rd|th)|seventh|tenth)\s+(?:house\s+)?lord\b/i;
+const LORD_BEFORE_RE = /\blord\s+(?:of|in|from)\s+(?:the\s+|its\s+)?$/i;
+const DEP_BEFORE_RE = /\b(?:lagna|ascendant|house|bhava|7th|seventh|10th|tenth|lord)\s+(?:of|in|from)\s+(?:the\s+|its\s+)?$/i;
 // A planet's own varga sign or dignity there.
 const FIRM_CLAIM_RE = /\b(exalted|debilitated|own sign|moolatrikona|vargottama|great friend|great enemy|friend|enemy|neutral)\b/gi;
 
 // "two windows", "3 timing windows"
 const WINDOW_COUNT_RE = /\b(one|two|three|four|five|six|seven|eight|\d{1,2})\s+(?:[a-z-]+\s+){0,3}?windows?\b/gi;
 const NUMBER_WORDS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight"];
+// "the first three of five windows"
+const FIRST_N_OF_M_RE = /\bfirst (one|two|three|four|five|six|seven|eight|\d{1,2}) of (?:the )?(one|two|three|four|five|six|seven|eight|\d{1,2})\b/i;
 const RANK_WORD_RE = /\b(strong(?:er|est)|best|better|weak(?:er|est)|worse|worst|most promising)\b/i;
 
 /**
@@ -153,7 +164,7 @@ const normName = (s: string) => s.toLowerCase().replace(/[-\s]+/g, " ").trim();
  *   ("Gajakesari is rated Strong, while Vesi is rated Weak");
  * - else the sentence's only item ("Rated Strong, Raj Yoga…");
  * - else the item named most recently before it in the field
- *   ("Shani Dhaiya is running now. Its intensity: Medium").
+ *   ("Manglik Dosha is present. It is of Medium intensity").
  * Two items before one phrase ("Raj Yoga and Dhana Yoga are rated Moderate") is
  * ambiguous and rejected; a phrase with no item named anywhere before it too.
  */
@@ -183,7 +194,7 @@ function checkRatings(text: string, ratings: NonNullable<ValidationContext["rati
     const at = m.index!;
     const { start, end } = sentenceOf(at);
     const since = new Set(names.filter((n) => n.at >= Math.max(from, start) && n.at < at).map((n) => n.key));
-    // The phrase's own clause ("Ruchaka has a Bhanga, Manglik Dosha remains at intensity: Medium").
+    // The phrase's own clause ("Ruchaka has a Bhanga, Manglik Dosha remains of Medium intensity").
     const clauseStart = Math.max(from, start, ...[...text.slice(start, at).matchAll(/[,;:–—]|\bwhile\b/g)].map((c) => start + c.index! + c[0].length));
     const inClause = new Set(names.filter((n) => n.at >= clauseStart && n.at < at).map((n) => n.key));
     const inSentence = new Set(names.filter((n) => n.at >= start && n.at < end).map((n) => n.key));
@@ -274,13 +285,23 @@ export function validateReading(output: unknown, ctx: ValidationContext): string
     for (const [field, value] of Object.entries(output as Record<string, unknown>)) {
       if (typeof value !== "string") continue;
       const sentences = sentencesOf(value);
-      // Lagna-dependent only when the house / Lagna / lord word sits next to the chart's name
-      // ("the D9 7th lord", "7th house of the D9"), not a D1 house elsewhere in the sentence.
-      const dependent = (re: RegExp) =>
-        sentences.some((x) => [...x.matchAll(new RegExp(re.source, "gi"))].some((m) => LAGNA_DEP_RE.test(x.slice(Math.max(0, m.index! - 30), m.index! + m[0].length + 30))));
+      // Lagna-dependent only when the house / Lagna / lord word is attached to the chart's name:
+      // right after it ("the D9 7th lord", "Navamsa Lagna") or just before it ("7th house of the
+      // D9"), not a D1 house elsewhere in the sentence ("in Bhava 9 and own sign in the D9").
+      // A claim about only the 7th / 10th lord is not tentative when that lord is the same
+      // under the neighbouring Lagna(s) (FACTS.birth_time.firm).
+      const dependent = (re: RegExp, firmLord: boolean) =>
+        sentences.some((x) =>
+          [...x.matchAll(new RegExp(re.source, "gi"))].some((m) => {
+            const after = x.slice(m.index! + m[0].length, m.index! + m[0].length + 22);
+            const before = x.slice(Math.max(0, m.index! - 30), m.index!);
+            if (firmLord && (LORD_AFTER_RE.test(after) || LORD_BEFORE_RE.test(before))) return false;
+            return DEP_AFTER_RE.test(after) || DEP_BEFORE_RE.test(before);
+          }),
+        );
       const caveat = TENTATIVE_RE.test(value);
-      for (const [chart, re, on] of [["D9", D9_RE, bt.d9], ["D10", D10_RE, bt.d10]] as const) {
-        if (on && !caveat && dependent(re)) problems.push(`${STYLE}${field}: ${chart} Lagna-dependent claims (houses, 7th / 10th and their lords) need "tentative" in this field`);
+      for (const [chart, re, on, firmLord] of [["D9", D9_RE, bt.d9, bt.firmLords?.d9], ["D10", D10_RE, bt.d10, bt.firmLords?.d10]] as const) {
+        if (on && !caveat && dependent(re, Boolean(firmLord))) problems.push(`${STYLE}${field}: ${chart} Lagna-dependent claims (houses, 7th / 10th and their lords) need "tentative" in this field`);
       }
       const count = (value.match(/tentativ/gi) ?? []).length;
       if (count > 1) problems.push(`${STYLE}${field}: say "tentative" once per section, on the specific claim (${count} times)`);
@@ -296,10 +317,19 @@ export function validateReading(output: unknown, ctx: ValidationContext): string
   if (ctx.ratings?.length) for (const field of collectStrings(output)) problems.push(...checkRatings(field, ctx.ratings));
 
   const borderline = new Map<string, number>();
+  let windowCountStated = false;
   for (const { sentence, d9, d10, prev } of sentencesWithVarga(collectStrings(output))) {
     // Never present a rating as Shadbala.
     if (SHADBALA_RE.test(sentence) && RATING_WORD_RE.test(sentence) && !NOT_COVERED_RE.test(sentence))
       problems.push(`"${sentence.slice(0, 80)}" presents a rating as Shadbala`);
+
+    // Ratings use "Low intensity" / "is cancelled", never "intensity: Low" (rule R1).
+    const colon = sentence.match(INTENSITY_COLON_RE);
+    if (colon) problems.push(`${STYLE}"${colon[0]}": write "${colon[0].match(/high|medium|low/i)?.[0].replace(/^./, (c) => c.toUpperCase()) ?? "Low"} intensity" (or "is cancelled") instead`);
+
+    // "Both Dasha lords are not significators" reads as the opposite of what is meant (rule W1).
+    const awkward = sentence.match(/\bboth (?:dasha|period) lords are not\b/i);
+    if (awkward) problems.push(`${STYLE}"${awkward[0]}": say "Neither window has both Dasha lords as significators" (FACTS.marriage.timing_windows_note)`);
 
     // Methodology wording stays out of the reading (rule E8).
     const meta = sentence.match(META_RE) ?? sentence.match(META_CASED_RE);
@@ -338,10 +368,18 @@ export function validateReading(output: unknown, ctx: ValidationContext): string
 
     // Window count and ranking must follow FACTS.marriage (rule W1).
     if (ctx.windows) {
-      for (const m of sentence.matchAll(WINDOW_COUNT_RE)) {
-        const n = /^\d+$/.test(m[1]) ? Number(m[1]) : NUMBER_WORDS.indexOf(m[1].toLowerCase());
-        if (n !== ctx.windows.count) problems.push(`"${m[0]}": there are ${ctx.windows.count} timing windows`);
+      const num = (w: string) => (/^\d+$/.test(w) ? Number(w) : NUMBER_WORDS.indexOf(w.toLowerCase()));
+      const firstOf = sentence.match(FIRST_N_OF_M_RE);
+      if (firstOf) {
+        if (num(firstOf[2]) !== ctx.windows.count || num(firstOf[1]) !== (ctx.windows.listed ?? ctx.windows.count))
+          problems.push(`"${firstOf[0]}": there are ${ctx.windows.count} timing windows, ${ctx.windows.listed ?? ctx.windows.count} listed`);
+      } else {
+        for (const m of sentence.matchAll(WINDOW_COUNT_RE)) {
+          if (num(m[1]) !== ctx.windows.count) problems.push(`"${m[0]}": there are ${ctx.windows.count} timing windows`);
+        }
       }
+      if (WINDOW_COUNT_RE.test(sentence) || firstOf) windowCountStated = true;
+      WINDOW_COUNT_RE.lastIndex = 0;
       if (!ctx.windows.ranked && /\bwindows?\b/i.test(sentence) && RANK_WORD_RE.test(sentence))
         problems.push(`${STYLE}"${sentence.slice(0, 80)}" ranks timing windows, but none ranks above another`);
     }
@@ -417,6 +455,10 @@ export function validateReading(output: unknown, ctx: ValidationContext): string
       }
     }
   }
+  // The marriage section states how many windows there are (rule W1).
+  const marriageText = output && typeof output === "object" ? (output as Record<string, unknown>).marriage : undefined;
+  if (ctx.windows?.count && typeof marriageText === "string" && /\bwindows?\b/i.test(marriageText) && !windowCountStated)
+    problems.push(`${STYLE}marriage: say how many timing windows there are (${ctx.windows.count})`);
   for (const [api, n] of borderline) if (n > 1) problems.push(`${STYLE}${api} is called borderline ${n} times; say it once, where its rating first matters`);
 
   // 6. Dates: every date must be one that appears in FACTS (or a birth date).

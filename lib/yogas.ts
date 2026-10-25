@@ -90,6 +90,16 @@ export function groupYogas(chart: Chart, asOf: string): YogaItem[] {
     target.cancellations.push(cleanClaim(b.claim).replace(/^.*?is cancelled because:\s*/i, ""));
   }
 
+  // Raj Yoga: mark each combination that includes the 8th lord (rated one level lower, lib/strength.ts).
+  const raja = groups.get("yoga.raja");
+  if (raja) {
+    const eighth = functionalNature(chart.lagna.sign_num).roles;
+    const lord8 = (Object.keys(eighth) as (keyof typeof eighth)[]).find((p) => eighth[p].houses.includes(8));
+    // "… — a Raj yoga." → "… — a Raj yoga (blemished: Shani rules the 8th)."
+    const mark = (claim: string) => `${claim.replace(/\.\s*$/, "")} (blemished: ${graha(lord8!)} rules the 8th).`;
+    if (lord8) raja.combinations = raja.combinations.map((c) => (c.participants.includes(lord8) ? { ...c, claim: mark(c.claim) } : c));
+  }
+
   const own = grahavaniYogas(chart);
   for (const g of own) groups.set(g.item.key, g.item);
 

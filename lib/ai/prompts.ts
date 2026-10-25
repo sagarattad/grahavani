@@ -22,8 +22,9 @@ DATA RULES
 RATINGS
 R1. Some Yogas and Doshas in FACTS have a "rating" (Grahavani's classical rating). State a
     rating ONLY in its fixed form, copied from FACTS: "rated Strong", "rated Moderate" or
-    "rated Weak" for a Yoga; "intensity: High", "intensity: Medium", "intensity: Low" or
-    "intensity: Cancelled" for a Dosha. Name that one Yoga or Dosha in the same sentence. You may explain it with its
+    "rated Weak" for a Yoga; "High intensity", "Medium intensity" or "Low intensity" for a
+    Dosha (e.g. "Manglik Dosha is of Low intensity"), and for a Dosha whose rating is
+    "cancelled", say it "is cancelled". Never write "intensity: …" in any form. Name that one Yoga or Dosha in the same sentence. You may explain it with its
     rating_reasons in plain words. Never invent or change a rating.
 R2. The rating is not Shadbala. Never call it Shadbala or a Shadbala score. Full Shadbala is
     not calculated; FACTS may give partial Shadbala components (Uccha, Dig, the Moon's
@@ -61,14 +62,17 @@ D1. A planet's dignity (grahas[].dignity, navamsa_dignity, planets_in_d10[].dign
 D2. The D9 is judged on its own (grahas[].navamsa_role): supportive, neutral or weakening.
     Call the D9 an improvement only when navamsa_improves_d1 is true, and never call a
     supportive D9 dignity a weakening factor.
-C1. A Dosha with "intensity: Cancelled" is formed but cancelled: say its formation is noted
+C1. A Dosha whose rating is "cancelled" is formed but cancelled: say its formation is noted
     for completeness and that it traditionally does not operate. Do not describe any
     remaining or reduced effect ("not erased", "retains", "residual", "reduces").
 S1. Sade Sati and Shani Dhaiya carry no intensity: describe them through their details in FACTS
     (natal Shani's role, dignity, combustion, and transiting Shani over natal Shani or Chandra),
     never as the chart "naming" or "giving" something.
-W1. Marriage timing windows: if you give a number of windows, it must be
-    marriage.timing_windows_count. If marriage.timing_windows_ranked is false, do not rank
+W1. Marriage timing windows: state how many there are (marriage.timing_windows_count) and
+    list them all; if marriage.timing_windows_listed is given, list those and say "the first
+    N of M windows" (N = timing_windows_listed, M = timing_windows_count). If
+    marriage.timing_windows_note is given, use that sentence as written for the Dasha side
+    ("Neither window has both Dasha lords as significators.") instead of a per-window remark. If marriage.timing_windows_ranked is false, do not rank
     or compare the windows (no "stronger", "best", "weaker"); present them in date order.
 E8. Write about the chart, never about the method or the data: no phrases such as "not
     computed", "not counted", "recorded as", "FACTS", "rating basis" or "the data shows".
@@ -141,8 +145,8 @@ in, with dates exactly as in FACTS. Report Neecha Bhanga (debility cancelled) se
 from Neechabhanga Raj Yoga. Treat yogas in FACTS.shared_links as one support (E6)),
 doshas (each present, cancelled or running dosha in FACTS first: its status and, if given,
 its rating in the fixed form, what it traditionally makes harder in everyday terms,
-cancellations (for a dosha still present they reduce but do not remove it; a dosha with
-intensity: Cancelled follows rule C1) and the periods it is traditionally felt
+cancellations (for a dosha still present they reduce but do not remove it; a cancelled
+dosha follows rule C1) and the periods it is traditionally felt
 in. For Manglik Dosha, give the houses from Lagna, Moon and Venus, the house set, which
 tradition-dependent cancellations apply, and how the intensity was worked out. Then list
 absent doshas briefly in one sentence),
@@ -178,9 +182,11 @@ of 5–7 sentences (about 100–140 words), written in everyday, general languag
 new to astrology. Do not start with the status or the item name; start with what it means.
 Cover, in this order:
 1. In plain words, what this Yoga or Dosha is and how it is formed (one sentence).
-2. Its rating straight away, in its fixed form from FACTS (e.g. "In this chart it is rated
-   Weak" or "Here its intensity: Low"), with why, from rating_reasons, in plain words.
-   Skip the rating when it is "not rated". Never call it Shadbala.
+2. Its rating straight away, in its fixed form from FACTS, as its own short sentence (e.g.
+   "In this chart it is rated Weak." or "In this chart it is of Low intensity." or "In this
+   chart it is cancelled."), then why in the next sentence, from rating_reasons, in plain
+   words. Never write "intensity: …" in any form ("carries intensity: …", "intensity is: …"). Skip the rating when it is "not rated". Never call
+   it Shadbala.
 3. What that means for this person, in everyday terms (work, relationships, mindset,
    habits):
    - Strong Yoga: its traditional effects, as things a person would notice.
@@ -188,7 +194,8 @@ Cover, in this order:
    - Weak or cancelled Yoga: say plainly that it gives little of its usual result; name its
      usual promise in one short clause at most, and say what is missing.
    - Dosha: what it traditionally makes harder; a listed cancellation reduces the effect
-     but does not remove it.
+     but does not remove it. For a cancelled one, say only that its formation is
+     noted for completeness and that it traditionally does not operate.
 4. How it shows up in this chart: the grahas and Bhavas involved as in FACTS, briefly, with
    what those places mean in simple words (e.g. "Bhava 5, the house of learning and
    creativity").
@@ -196,7 +203,8 @@ No silver linings: do not turn a weakness into "growth", "lessons" or "depth", a
 end on encouragement.
 Avoid jargon; when a Sanskrit term is needed, add a short English meaning. For a Nabhasa
 yoga, describe the overall pattern of the chart. Never comment on what the data does or
-does not include; just explain what is there. Direct, no softening or reassurance, no
+does not include, and never refer to the chart's own notes or to what the chart "names";
+just explain what is there. Direct, no softening or reassurance, no
 dates, no remedies, no predictions of specific events. Return exactly the keys in FACTS.items, no
 others.`,
   about_milan: `For EVERY item in FACTS.items (Gun Milan doshas), return one entry with the same key
@@ -204,7 +212,7 @@ and an "about" of 5–7 sentences (about 100–140 words) in everyday, general l
 someone new to astrology. Do not start with the status or the item name. Explain what this
 koot measures, what the dosha traditionally signifies for a couple in daily life, how it is
 formed here (the two Moon signs / Nakshatras in FACTS, in simple words), its rating in the
-fixed form from FACTS (e.g. "here its intensity: Low") with its reasons in plain words, and,
+fixed form from FACTS (e.g. "here it is of Low intensity") with its reasons in plain words, and,
 if a cancellation is listed, that it traditionally reduces the effect. Never call
 the rating Shadbala. Refer to "the
 Groom" and "the Bride" only. Direct and plain, no softening, no dates, no remedies, never advise to marry

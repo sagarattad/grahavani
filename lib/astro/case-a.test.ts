@@ -21,7 +21,7 @@ import { marriageTiming, marriageWindows } from "./marriage-timing";
 import { dhaiyaRanges, sadeSatiRanges } from "./transits";
 import { kundliFacts } from "../ai/facts";
 import { dashaBalanceText } from "../format";
-import { kemadrumaCard } from "../doshas";
+import { dhaiyaCard, kemadrumaCard, sadeSatiCard, saturnReturnLines } from "../doshas";
 
 const DIR = path.join(__dirname, "../../tests/fixtures/kundlit");
 const present = existsSync(path.join(DIR, "janam-kundali-case-a.json")) && existsSync(path.join(DIR, "case-a.expected.json"));
@@ -142,6 +142,21 @@ describe.skipIf(!present)("regression: case A (local-only fixture)", () => {
       expect(y.rating.reasons.join(" | "), k).toMatch(/Chandra: strong/);
       expect(y.rating.reasons.join(" | "), k).toMatch(/Borderline: depends on Chandra/);
     }
+  });
+
+  describe("round 6 (Oct 2026)", () => {
+    const r6 = present ? expected.round6 : null!;
+    const asOf = present ? chart.vimshottari.current.as_of : "";
+
+    it("Saturn over natal Saturn outside Sade Sati / Dhaiya is a separate Saturn return line", () => {
+      expect(saturnReturnLines(chart, asOf)[0].startsWith(r6.saturn_return_starts)).toBe(true);
+      const cards = [sadeSatiCard(chart, asOf), dhaiyaCard(chart, asOf)];
+      for (const c of cards) expect(c.details.join()).not.toMatch(/natal Shani \(Kumbha\)/);
+    });
+
+    it("when-active lists leave out periods starting after age 90", () => {
+      for (const y of groupYogas(chart, asOf)) for (const w of y.windows) expect(w.start < r6.no_window_after, `${y.name} ${w.md} ${w.start}`).toBe(true);
+    });
   });
 
   describe("round 4 (Oct 2026)", () => {

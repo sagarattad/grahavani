@@ -6,7 +6,7 @@ import { yogaChecklist } from "../yogas";
 import { buildDoshas } from "../doshas";
 import { comparedText, doshaState, sortKoots } from "../summaries";
 import { points } from "../format";
-import { RATING_RE, normRating, validateReading } from "./validate";
+import { INTENSITY_COLON_RE, RATING_RE, normRating, validateReading } from "./validate";
 import type { ValidationContext } from "./facts";
 import { rateKootDosha, ratingPhrase } from "../strength";
 import type { Chart, KaalSarp, Manglik, Milan } from "../kundlit-schemas";
@@ -22,7 +22,7 @@ export type AboutItem = {
   status: string;
   details: string[];
   cancellations: string[];
-  rating: string; // fixed phrase, e.g. "rated Moderate", "intensity: Low", "not rated"
+  rating: string; // fixed phrase, e.g. "rated Moderate", "Low intensity", "cancelled", "not rated"
   rating_reasons: string[];
 };
 
@@ -126,6 +126,8 @@ export function milanAboutFacts(groom: Chart, bride: Chart, items: AboutItem[]) 
 }
 
 const REMEDY_RE = /\b(remed\w*|puja|pooja|mantras?|gemstones?|gems?|yantras?|donat\w*|fasting|fasts|vrat)\b/i;
+// Awkward rating constructions and references to the chart's own notes (About prompt rules).
+const ABOUT_WORDING_RE = /\bintensity is:?\s+(?:high|medium|low|cancelled)\b|\bits intensity:?\s+\w+,?\s+because\b|\bthe chart['’]s own notes?\b|\bwhat the chart (?:names|calls)\b|\bthe chart names\b/i;
 
 /** Each About text may state only its own item's rating, in the fixed form. */
 function checkAboutRatings(output: { items: { key: string; about: string }[] }, items: AboutItem[]): string[] {
@@ -157,6 +159,8 @@ export function validateAbout(
   for (const i of output.items) {
     const m = i.about.match(REMEDY_RE);
     if (m) problems.push(`"${i.key}" mentions a remedy ("${m[0]}")`);
+    const w = i.about.match(ABOUT_WORDING_RE) ?? i.about.match(INTENSITY_COLON_RE);
+    if (w) problems.push(`"${i.key}": "${w[0]}": state the rating as its own sentence ("it is of Low intensity", "it is cancelled") and do not refer to the chart's notes`);
   }
   problems.push(...checkAboutRatings(output, items));
   problems.push(...validateReading(output, ctx));

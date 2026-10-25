@@ -178,13 +178,13 @@ describe("Manglik validation", () => {
 });
 
 describe("ratings in fixed phrases", () => {
-  // Raipur: Raj Yoga rated Moderate, Dhana Yoga Weak, Manglik Dosha intensity: Medium.
+  // Raipur: Raj Yoga rated Moderate, Dhana Yoga Weak, Manglik Dosha of Medium intensity.
   const check = (text: string) => validateReading({ yogas: text }, kundliCtx);
 
   it("facts carry the fixed rating phrase", () => {
     const raj = (facts.yogas_present as { yoga: string; rating: string }[]).find((y) => y.yoga === "Raj Yoga")!;
     expect(raj.rating).toBe("rated Moderate");
-    expect(JSON.stringify(facts.doshas)).toMatch(/"rating":"intensity: Medium"/);
+    expect(JSON.stringify(facts.doshas)).toMatch(/"rating":"Medium intensity"/);
     expect(JSON.stringify(facts.grahas)).toMatch(/"avastha":"Bala \(minor factor\)"/);
   });
 
@@ -194,8 +194,11 @@ describe("ratings in fixed phrases", () => {
   });
 
   it("a dosha's intensity must match FACTS", () => {
-    expect(check("Manglik Dosha, intensity: Medium, with one cancellation.")).toEqual([]);
-    expect(check("Manglik Dosha, intensity: High.").join()).toMatch(/computed intensity: Medium/);
+    expect(check("Manglik Dosha, of Medium intensity, has one cancellation.")).toEqual([]);
+    expect(check("Manglik Dosha is of High intensity.").join()).toMatch(/computed Medium intensity/);
+    // The old colon form is rejected in every construction (rule R1).
+    for (const t of ["Manglik Dosha, intensity: Medium.", "Manglik Dosha carries intensity: Medium.", "Manglik Dosha has intensity: Medium.", "Its intensity is: Medium."])
+      expect(check(t).join(), t).toMatch(/write "Medium intensity"/);
   });
 
   it("other uses of strong, weak, high or low are ignored", () => {
@@ -217,17 +220,17 @@ describe("ratings in fixed phrases", () => {
   it("several items in one sentence: each phrase follows its own item's name", () => {
     expect(check("Raj Yoga is rated Moderate, while Vasi is rated Weak.")).toEqual([]);
     expect(check("Raj Yoga is rated Moderate, while Ruchaka is rated Strong.").join()).toMatch(/Ruchaka: text says "rated Strong"/);
-    expect(check("Manglik Dosha has intensity: Medium and Raj Yoga is rated Moderate.")).toEqual([]);
+    expect(check("Manglik Dosha is of Medium intensity and Raj Yoga is rated Moderate.")).toEqual([]);
     // The phrase's own clause names one item (a live failure).
-    expect(check("Ruchaka has Bhanga cancellation, Manglik Dosha remains at intensity: Medium.")).toEqual([]);
-    expect(check("Ruchaka has Bhanga cancellation, Manglik Dosha remains at intensity: High.").join()).toMatch(/computed intensity: Medium/);
+    expect(check("Ruchaka has Bhanga cancellation, Manglik Dosha remains of Medium intensity.")).toEqual([]);
+    expect(check("Ruchaka has Bhanga cancellation, Manglik Dosha remains of High intensity.").join()).toMatch(/computed Medium intensity/);
   });
 
   it("a rating can refer back to the item named just before (the live failures)", () => {
-    expect(check("Manglik Dosha is present. Its intensity: Medium.")).toEqual([]);
-    expect(check("Manglik Dosha is present; intensity: Medium.")).toEqual([]);
+    expect(check("Manglik Dosha is present. It is of Medium intensity.")).toEqual([]);
+    expect(check("Manglik Dosha is present; Medium intensity.")).toEqual([]);
     expect(check("Raj Yoga links the 1st and 5th lords. It is rated Moderate because of combustion.")).toEqual([]);
-    expect(check("Manglik Dosha is present. Its intensity: High.").join()).toMatch(/computed intensity: Medium/);
+    expect(check("Manglik Dosha is present. It is of High intensity.").join()).toMatch(/computed Medium intensity/);
   });
 
   it("hyphen and space spellings are the same name", () => {
@@ -332,12 +335,17 @@ describe("evidence rules (Oct 2026 review)", () => {
     const ctx = { ...placementCtx, birthTimeSensitive: { d9: true, d10: false, planets: [] } };
     expect(validateReading({ health_wellbeing: "Chandra, the Lagna lord in Bhava 9, has own sign dignity in the D9." }, ctx).join()).not.toMatch(/Lagna-dependent/);
     expect(validateReading({ health_wellbeing: "The D9 7th lord is well placed." }, ctx).join()).toMatch(/Lagna-dependent/);
+    expect(validateReading({ health_wellbeing: "Chandra has friend dignity in Bhava 9 and own sign in the D9." }, ctx).join()).not.toMatch(/Lagna-dependent/);
+    expect(validateReading({ marriage: "The 7th house of the D9 is Meena." }, ctx).join()).toMatch(/Lagna-dependent/);
+    expect(validateReading({ marriage: "The Navamsa Lagna is Kanya." }, ctx).join()).toMatch(/Lagna-dependent/);
   });
 
   it("transit sentences may name Saturn's and Jupiter's transit signs (live failure)", () => {
     const t = kundliCtx.transitPlacements!.find((p) => p.graha === "Jupiter" && !kundliCtx.placements.some((q) => q.graha === "Jupiter" && q.rashi === p.rashi))!;
     expect(check(`The window has a double transit, with Guru in ${t.rashi}.`)).toEqual([]);
     expect(check(`Guru in ${t.rashi} gives wisdom.`).join()).toMatch(/not in the computed facts/);
+    // A window sentence naming the other planet "from" a sign is about transits too (live failure).
+    expect(check(`28 Mar 2034 – 13 Jul 2034: Guru in ${t.rashi} and Shani from Mithuna jointly influence Meena.`).join()).not.toMatch(/Guru in/);
   });
 
   it("wording problems are marked as style; factual ones are not (a last attempt with style-only problems is kept)", () => {
@@ -348,13 +356,33 @@ describe("evidence rules (Oct 2026 review)", () => {
     expect(fact.some((p) => !isStyleProblem(p))).toBe(true);
   });
 
+  it("window total: 'the first N of M' must match, and the marriage section states the count (rule W1)", () => {
+    const ctx = { ...placementCtx, windows: { count: 5, listed: 3, ranked: false } };
+    const m = (t: string) => validateReading({ marriage: t }, ctx).join();
+    expect(m("These are the first three of five windows.")).toBe("");
+    expect(m("These are the first three of four windows.")).toMatch(/there are 5 timing windows, 3 listed/);
+    expect(m("A window opens in 2028.")).toMatch(/say how many timing windows there are/);
+  });
+
+  it("a claim about only a firm 7th / 10th lord needs no caveat; the 7th house itself still does", () => {
+    const ctx = { ...placementCtx, birthTimeSensitive: { d9: true, d10: false, planets: [], firmLords: { d9: true, d10: false } } };
+    expect(validateReading({ marriage: "The D9 7th lord Shani is well placed." }, ctx).join()).not.toMatch(/Lagna-dependent/);
+    expect(validateReading({ marriage: "The D9 7th house is Makara." }, ctx).join()).toMatch(/Lagna-dependent/);
+    const notFirm = { ...ctx, birthTimeSensitive: { ...ctx.birthTimeSensitive, firmLords: { d9: false, d10: false } } };
+    expect(validateReading({ marriage: "The D9 7th lord Shani is well placed." }, notFirm).join()).toMatch(/Lagna-dependent/);
+  });
+
+  it("'Both Dasha lords are not significators' is rewritten (rule W1)", () => {
+    expect(validateReading({ marriage: "There are two windows. Both Dasha lords are not significators in either." }, { ...placementCtx, windows: { count: 2, ranked: false } }).join()).toMatch(/Neither window has both Dasha lords/);
+  });
+
   it("window count and ranking follow FACTS (rule W1)", () => {
     const ctx = { ...kundliCtx, windows: { count: 3, ranked: false } };
     const c = (t: string) => validateReading({ marriage: t }, ctx);
     expect(c("There are three traditionally indicated windows.")).toEqual([]);
     expect(c("There are two windows.").join()).toMatch(/there are 3 timing windows/);
     expect(c("The 2036 window is stronger.").join()).toMatch(/ranks timing windows/);
-    expect(validateReading({ marriage: "The 2036 window is stronger." }, { ...ctx, windows: { count: 3, ranked: true } })).toEqual([]);
+    expect(validateReading({ marriage: "There are three windows. The 2036 window is stronger." }, { ...ctx, windows: { count: 3, ranked: true } })).toEqual([]);
   });
 
   it("borderline is said once per planet (rule E7)", () => {
