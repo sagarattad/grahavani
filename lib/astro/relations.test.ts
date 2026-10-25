@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { compoundRelation, debilitationSign, dignityOf, dignityText, naturalRelation, ownSigns, temporaryFriend, vargaChange, DIGNITY_RANK } from "./relations";
+import { compoundRelation, debilitationSign, dignityOf, dignityText, naturalRelation, ownSigns, temporaryFriend, vargaReading, dignityFact, DIGNITY_RANK } from "./relations";
 import { functionalNature, houseLords } from "./functional";
 
 describe("planetary relationships", () => {
@@ -30,7 +30,8 @@ describe("planetary relationships", () => {
   it("Jupiter in Vrishchika with Mars in Tula: friend's sign, compound great friend", () => {
     const d = dignityOf("Jupiter", 8, { Jupiter: 8, Mars: 7 }, 14.4);
     expect(d).toMatchObject({ label: "great friend", natural: "friend", compound: "great friend", signLord: "Mars" });
-    expect(dignityText(d)).toBe("friend's sign (compound: great friend)");
+    expect(dignityText(d)).toBe("friend (compound great friend)");
+    expect(dignityFact(d)).toBe("great friend"); // the AI gets the compound relation only
   });
 
   it("BPHS degree zones apply in the D1 for every planet", () => {
@@ -58,12 +59,18 @@ describe("planetary relationships", () => {
     expect(dignityOf("Venus", 11, d1).label).toBe("neutral");
   });
 
-  it("D1 → D9 rank: improved, weakened, confirmed; moolatrikona above own", () => {
+  it("D9 judged on its own; 'improved' only from a neutral-or-worse D1", () => {
     expect(DIGNITY_RANK.indexOf("moolatrikona")).toBeGreaterThan(DIGNITY_RANK.indexOf("own"));
     const deb = dignityOf("Venus", 6, {}, 10);
-    expect(vargaChange(deb, dignityOf("Venus", 11, { Venus: 6, Saturn: 11 }))).toBe("improved");
-    expect(vargaChange(dignityOf("Mars", 10, {}), dignityOf("Mars", 4, {}))).toBe("weakened");
-    expect(vargaChange(dignityOf("Jupiter", 12, {}), dignityOf("Jupiter", 9, {}))).toBe("confirmed");
+    // Debilitated → neutral: neutral role, improved.
+    expect(vargaReading(deb, dignityOf("Venus", 11, { Venus: 6, Saturn: 11 }))).toEqual({ role: "neutral", improved: true });
+    // Own sign → neutral: neutral, not "weakened" and not improved.
+    const own = dignityOf("Saturn", 11, {}, 25);
+    expect(vargaReading(own, dignityOf("Saturn", 3, { Saturn: 11, Mercury: 6 }))).toEqual({ role: "neutral", improved: false });
+    // Moolatrikona → friend: supportive (never a weakening), not improved.
+    const mt = dignityOf("Moon", 2, {}, 12);
+    expect(vargaReading(mt, dignityOf("Moon", 11, { Moon: 2, Saturn: 11 }))).toEqual({ role: "supportive", improved: false });
+    expect(vargaReading(own, dignityOf("Mars", 4, {})).role).toBe("weakening");
   });
 
   it("D9 dignity is computed from signs (no Kundlit class)", () => {

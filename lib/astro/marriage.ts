@@ -2,7 +2,8 @@
 // its lord, Venus in the D9, Darakaraka (Jaimini chara karaka) and Upapada
 // Lagna, with D9 strengths weighed against D1 weaknesses explicitly.
 import type { Chart } from "../kundlit-schemas";
-import { SEVEN, SIGN_LORD, dignityOf, dignityText, vargaChange, type Dignity, type Planet } from "./relations";
+import { SEVEN, SIGN_LORD, dignityFact, dignityOf, vargaReading, type Dignity, type Planet } from "./relations";
+import { rashi } from "../glossary";
 import { houseLords } from "./functional";
 import { chartStrengths, type StrengthLevel } from "./planet-strength";
 import { byName, houseFrom } from "./rules";
@@ -85,20 +86,26 @@ export function marriageFactors(chart: Chart): MarriageFactors {
   const venusS = strengths.get("Venus")!;
   const l7 = strengths.get(seventhLord)!;
 
-  // D1 → D9 by dignity rank (debilitated … exalted).
-  const change = (p: Planet, role: string) => {
+  // Each planet once: its D1 dignity, then the D9 dignity judged on its own
+  // (friend or better supports, neutral is neutral, enemy or worse weakens),
+  // and "improved" only when a neutral-or-worse D1 dignity is bettered.
+  const roles = new Map<Planet, string[]>();
+  for (const [p, role] of [["Venus", "Venus"], [seventhLord, "D1 7th lord"], [d9Lord, "D9 7th lord"]] as [Planet, string][]) roles.set(p, [...(roles.get(p) ?? []), role]);
+  const comparison = [...roles].map(([p, labels]) => {
     const g = byName(chart, p);
+    const st = strengths.get(p)!;
     const d1 = dignityOf(p, g.sign_num, d1Temp, g.deg_in_sign);
     const d9 = dignityOf(p, g.navamsha.sign_num, d9Temp);
-    const how = vargaChange(d1, d9);
-    const verdict = how === "improved" ? "improved in the D9 (a mitigation)" : how === "weakened" ? "weakened in the D9" : "the D9 confirms the D1";
-    return `${role}${p}: ${dignityText(d1)} in the D1, ${dignityText(d9)} in the D9: ${verdict}${g.vargottama ? "; Vargottama (same sign in D1 and D9, a strong confirmation)" : ""}.`;
-  };
-  const comparison = [...new Set([change("Venus", ""), change(seventhLord, "D1 7th lord "), change(d9Lord, "D9 7th lord ")])];
-  comparison.push(`D1 7th lord ${seventhLord}: ${l7.level}, in Bhava ${lordG.house}.`);
+    const { role, improved } = vargaReading(d1, d9);
+    const who = labels.filter((l) => l !== p).join(" and ");
+    return (
+      `${who ? `${who} ` : ""}${p} (${st.level}, Bhava ${g.house}): ${dignityFact(d1)} in the D1; D9 ${rashi(g.navamsha.sign_num)} ${dignityFact(d9)}: ${role}` +
+      `${improved ? ", improved from the D1 (a mitigation)" : ""}${g.vargottama ? "; Vargottama (same sign in D1 and D9, a strong confirmation)" : ""}.`
+    );
+  });
 
   return {
-    d1: { seventhSign: wrap(chart.lagna.sign_num + 6), seventhLord, lordHouse: lordG.house, lordStrength: l7.level, venusStrength: venusS.level, venusDignity: dignityText(venusS.dignity!) },
+    d1: { seventhSign: wrap(chart.lagna.sign_num + 6), seventhLord, lordHouse: lordG.house, lordStrength: l7.level, venusStrength: venusS.level, venusDignity: dignityFact(venusS.dignity!) },
     d9: {
       lagnaSign: d9Lagna,
       seventhSign: d9Seventh,

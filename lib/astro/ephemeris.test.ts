@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { lahiriAyanamsa, siderealLongitude, signStays } from "./ephemeris";
 import { MIN_WINDOW_DAYS, marriageSignificators, marriageWindows } from "./marriage-timing";
-import { sadeSatiRanges } from "./transits";
+import { dhaiyaRanges, sadeSatiRanges, transitSpan } from "./transits";
 import { loadKundliFixtures, rawFixture } from "../../tests/fixtures";
 
 const fx = loadKundliFixtures();
@@ -37,6 +37,24 @@ describe.each(fx)("local ephemeris against Kundlit: $file", ({ file, chart }) =>
     for (const d of kundlit) {
       if (ms(d) < ms(asOf)) continue; // ranges are listed from as_of on
       expect(Math.min(...edges.map((e) => Math.abs(e - ms(d)))) / DAY, d).toBeLessThan(1);
+    }
+  });
+});
+
+describe.each(fx)("Saturn phases shown once per cycle: $file", ({ chart }) => {
+  const asOf = chart.vimshottari.current.as_of;
+  const span = transitSpan(chart, asOf);
+
+  it("no phase repeats within a cycle; dips are inside their phase; cuts are marked", () => {
+    for (const ranges of [sadeSatiRanges(chart, asOf), dhaiyaRanges(chart, asOf)]) {
+      for (const label of new Set(ranges.map((r) => r.label))) {
+        const same = ranges.filter((r) => r.label === label);
+        for (let i = 1; i < same.length; i++) expect(ms(same[i].start) - ms(same[i - 1].end), label).toBeGreaterThan(20 * 365 * DAY);
+      }
+      for (const r of ranges) {
+        for (const d of r.dips ?? []) expect(ms(d.start) >= ms(r.start) && ms(d.end) <= ms(r.end)).toBe(true);
+        expect(Boolean(r.continuesBeyond)).toBe(ms(r.end) >= span.to);
+      }
     }
   });
 });

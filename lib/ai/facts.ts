@@ -12,11 +12,11 @@ import { doshaState, sortKoots } from "../summaries";
 import { rateKootDosha, rateManglik, ratingPhrase, type Rating } from "../strength";
 import { chartStrengths } from "../astro/planet-strength";
 import { functionalNature } from "../astro/functional";
-import { dignityText, vargaChange } from "../astro/relations";
+import { dignityFact, vargaReading, type Dignity } from "../astro/relations";
 import { ownHouseLords } from "../astro/rules";
 import { marriageFactors } from "../astro/marriage";
-import { marriageSignificators, marriageWindows } from "../astro/marriage-timing";
-import { birthTimeCheck, careerD10, transitOverlaps } from "../astro/timing-checks";
+import { marriageSignificators, marriageTiming } from "../astro/marriage-timing";
+import { birthTimeCheck, careerD10, d10Fact, transitOverlaps } from "../astro/timing-checks";
 import { readDashaLord, type DashaLordReading } from "../astro/dasha-lords";
 import { dasamsaSign } from "../astro/varga";
 import type { ManglikResult } from "../astro/manglik";
@@ -33,6 +33,10 @@ export type ValidationContext = {
   ratings?: RatingEntry[];
   /** Planets (API names) whose composite strength lists Dig bala as a factor. */
   digBalaFactor?: string[];
+  /** Each planet's one dignity (compound relation or own / exalted / …) per chart. */
+  dignities?: Record<string, { d1?: string; d9?: string; d10?: string }>;
+  /** Marriage timing windows: how many there are, and whether any rank above another. */
+  windows?: { count: number; ranked: boolean };
 };
 
 export type RatingEntry = { key: string; names: string[]; rating: string };
@@ -81,10 +85,18 @@ function doshaFact(c: DoshaCard) {
   return {
     dosha: c.name,
     status: c.statusLabel,
-    ...(c.rating.level ? { rating: ratingPhrase(c.rating, "dosha"), rating_reasons: c.rating.reasons } : {}),
+    ...(c.rating.level ? { rating: ratingPhrase(c.rating, "dosha"), rating_reasons: compoundOnly(c.rating.reasons) } : {}),
     details: c.details,
     traditionally_felt_in: c.windows.map(windowFact),
-    dates: c.ranges.map((r) => ({ phase: r.label, from: dateOnly(r.start), to: dateOnly(r.end), running_now: r.current })),
+    dates: c.ranges.map((r) => ({
+      phase: r.label,
+      from: dateOnly(r.start),
+      to: dateOnly(r.end),
+      running_now: r.current,
+      ...(r.startsBefore ? { started_before_from: true } : {}),
+      ...(r.continuesBeyond ? { continues_beyond_to: true } : {}),
+      ...(r.dips?.length ? { saturn_leaves_the_sign: r.dips.map((d) => ({ into: rashi(d.sign), direction: d.direction, from: dateOnly(d.start), to: dateOnly(d.end) })) } : {}),
+    })),
   };
 }
 
@@ -97,6 +109,16 @@ function scrubDate<T>(value: T, date: string): T {
   }
   return value;
 }
+
+/** D9 dignity judged on its own: supportive / neutral / weakening, and whether it improves a neutral-or-worse D1. */
+function d9Fact(d1: Dignity, d9: Dignity) {
+  const r = vargaReading(d1, d9);
+  return { navamsa_role: r.role, ...(r.improved ? { navamsa_improves_d1: true } : {}) };
+}
+
+/** Rating reasons for the AI: "D1 Tula: neutral (compound friend)" → "D1 Tula: friend" (one dignity per planet, rule D1). */
+const compoundOnly = (reasons: string[]) =>
+  reasons.map((r) => r.replace(/\b(?:friend|neutral|enemy)\s+\(compound (great friend|great enemy|friend|neutral|enemy)\)/g, "$1"));
 
 type KundliExtras = { manglik: Manglik | null; kaalSarp: KaalSarp | null; birthDate?: string };
 
@@ -121,7 +143,8 @@ export function kundliFacts(chart: Chart, dasha: DashaCurrent, extras: KundliExt
   const bt = birthTimeCheck(chart, rashi);
   const tr = transitOverlaps(chart, asOf);
   const sig = marriageSignificators(chart);
-  const windows = marriageWindows(chart, asOf);
+  const { windows, brief } = marriageTiming(chart, asOf);
+  const windowsRanked = new Set(windows.map((w) => w.rank)).size > 1;
   const lordFact = (r: DashaLordReading) => ({
     lord: g(r.lord),
     reading: r.summary,
@@ -153,16 +176,18 @@ export function kundliFacts(chart: Chart, dasha: DashaCurrent, extras: KundliExt
         pada: x.pada,
         retrograde: x.retrograde,
         combust: x.combust,
-        dignity: s.dignity ? dignityText(s.dignity) : "node",
+        // One dignity (the compound relation); the natural relation is named separately.
+        dignity: s.dignity ? dignityFact(s.dignity) : "node",
+        ...(s.dignity?.natural ? { natural_relation_to_sign_lord: s.dignity.natural } : {}),
         navamsa_rashi: rashi(x.navamsha.sign_num),
-        ...(s.d9Dignity ? { navamsa_dignity: dignityText(s.d9Dignity) } : {}),
+        ...(s.d9Dignity ? { navamsa_dignity: dignityFact(s.d9Dignity) } : {}),
         vargottama: x.vargottama,
         ...(x.avastha ? { avastha: `${x.avastha} (minor factor)` } : {}),
         strength: s.level,
         ...(s.borderline ? { strength_borderline: "close to a level threshold; a small change in one factor would change the level" } : {}),
         // Every factor of the composite strength, so the reading never names one that is not here.
-        strength_factors: [...s.factors].sort((a, b) => Math.abs(b.points) - Math.abs(a.points)).map((f) => f.label),
-        ...(s.dignity && s.d9Dignity ? { d9_vs_d1: vargaChange(s.dignity, s.d9Dignity) } : {}),
+        strength_factors: [...s.factors].sort((a, b) => Math.abs(b.points) - Math.abs(a.points)).map((f) => f.fact ?? f.label),
+        ...(s.dignity && s.d9Dignity ? d9Fact(s.dignity, s.d9Dignity) : {}),
         ...(s.shadbala.uccha !== null
           ? { partial_shadbala_virupas: { uccha: Math.round(s.shadbala.uccha), dig: Math.round(s.shadbala.dig!), ...(s.shadbala.paksha !== null ? { paksha: Math.round(s.shadbala.paksha) } : {}) } }
           : {}),
@@ -183,16 +208,21 @@ export function kundliFacts(chart: Chart, dasha: DashaCurrent, extras: KundliExt
       venus_d1: { dignity: mf.d1.venusDignity, strength: mf.d1.venusStrength },
       d9_lagna: rashi(mf.d9.lagnaSign),
       d9_7th: rashi(mf.d9.seventhSign),
-      d9_7th_lord: { graha: g(mf.d9.seventhLord), d9_rashi: rashi(mf.d9.lordD9Sign), d9_dignity: dignityText(mf.d9.lordD9Dignity), vargottama: mf.d9.lordVargottama },
-      venus_d9: { rashi: rashi(mf.d9.venusD9Sign), dignity: dignityText(mf.d9.venusD9Dignity) },
+      d9_7th_lord: { graha: g(mf.d9.seventhLord), d9_rashi: rashi(mf.d9.lordD9Sign), d9_dignity: dignityFact(mf.d9.lordD9Dignity), vargottama: mf.d9.lordVargottama },
+      venus_d9: { rashi: rashi(mf.d9.venusD9Sign), dignity: dignityFact(mf.d9.venusD9Dignity) },
       darakaraka: { graha: g(mf.darakaraka.planet), scheme: mf.darakaraka.scheme, eight_karaka_scheme: g(mf.darakaraka.eightKaraka) },
       upapada_lagna: { rashi: rashi(mf.upapada.sign), lord: g(mf.upapada.lord) },
       d1_vs_d9: mf.comparison,
       significators: [...sig.primary].map(([p, why]) => ({ graha: g(p), as: why })),
+      timing_windows_count: windows.length,
+      // Windows differ in rank only by whether both Dasha lords are significators; nothing else ranks them.
+      timing_windows_ranked: windowsRanked,
+      timing_windows_shorter_than_30_days_left_out: brief.length,
       timing_windows: windows.map((w) => ({
         from: dateOnly(w.start),
         to: dateOnly(w.end),
         dasha: w.period.split("–").map(graha).join("–"),
+        ...(windowsRanked ? { rank: w.rank === "MD and AD" ? 1 : 2 } : {}),
         both_lords_significators: w.rank === "MD and AD",
         double_transit: w.why,
         also_from_chandra: w.moonAlso,
@@ -205,7 +235,7 @@ export function kundliFacts(chart: Chart, dasha: DashaCurrent, extras: KundliExt
             d10_lagna: rashi(d10.lagnaSign),
             d10_10th: rashi(d10.tenthSign),
             d10_10th_lord: g(d10.tenthLord),
-            planets_in_d10: d10.planets.map((p) => ({ graha: g(p.name), d10_rashi: rashi(p.sign), dignity: p.dignity })),
+            planets_in_d10: d10.planets.map((p) => ({ graha: g(p.name), d10_rashi: rashi(p.sign), dignity: p.fact })),
             ...(bt?.sensitive.d10 ? { birth_time_sensitive: bt.notesBy.d10 } : {}),
           },
         }
@@ -243,7 +273,7 @@ export function kundliFacts(chart: Chart, dasha: DashaCurrent, extras: KundliExt
       category: y.category,
       status: y.status === "cancelled" ? "present but cancelled (Bhanga)" : "present",
       rating: ratingPhrase(y.rating, "yoga"),
-      rating_reasons: y.rating.reasons,
+      rating_reasons: compoundOnly(y.rating.reasons),
       combinations: y.combinations.map((c) => c.claim),
       cancellations: y.cancellations,
       traditionally_active_in: y.nabhasa ? "throughout life (Nabhasa yoga)" : y.windows.map(windowFact),
@@ -277,6 +307,12 @@ export function kundliFacts(chart: Chart, dasha: DashaCurrent, extras: KundliExt
       ...doshaCards.filter((c) => c.rating.level).map((c) => ratingEntry(c.key, c.name, c.rating, "dosha")),
     ],
     digBalaFactor: [...strengths.values()].filter((s) => s.factors.some((f) => f.label.startsWith("dig bala"))).map((s) => s.name),
+    dignities: Object.fromEntries(
+      [...strengths.values()]
+        .filter((s) => s.dignity)
+        .map((s) => [s.name, { d1: dignityFact(s.dignity!), d9: dignityFact(s.d9Dignity!), d10: d10Fact(chart, s.name) }]),
+    ),
+    windows: { count: windows.length, ranked: windowsRanked },
   };
   return { facts, ctx };
 }

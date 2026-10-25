@@ -104,18 +104,32 @@ export function dignityOf(p: Planet, sign: number, tempSigns: Partial<Record<str
   return { label: compound ?? (natural === "friend" ? "friend" : natural === "enemy" ? "enemy" : "neutral"), natural, compound, signLord };
 }
 
-/** Weakest to strongest; used to compare a planet's D1 and D9 dignity. */
+/** Weakest to strongest. */
 export const DIGNITY_RANK: DignityClass[] = ["debilitated", "great enemy", "enemy", "neutral", "friend", "great friend", "own", "moolatrikona", "exalted"];
+const rank = (d: Dignity) => DIGNITY_RANK.indexOf(d.label);
 
-/** "improved" when the D9 dignity ranks above the D1 one (a mitigation), "weakened" below, "confirmed" equal. */
-export function vargaChange(d1: Dignity, varga: Dignity): "improved" | "weakened" | "confirmed" {
-  const diff = DIGNITY_RANK.indexOf(varga.label) - DIGNITY_RANK.indexOf(d1.label);
-  return diff > 0 ? "improved" : diff < 0 ? "weakened" : "confirmed";
+export type VargaRole = "supportive" | "neutral" | "weakening";
+
+/**
+ * A divisional-chart dignity judged on its own: friend or better supports,
+ * neutral is neutral, enemy / great enemy / debilitated weakens. `improved`
+ * only when the D1 dignity is neutral or worse and the D9 one is better
+ * (a mitigation); a supportive D9 is never called a weakening.
+ */
+export function vargaReading(d1: Dignity, varga: Dignity): { role: VargaRole; improved: boolean } {
+  const r = rank(varga);
+  const role: VargaRole = r >= DIGNITY_RANK.indexOf("friend") ? "supportive" : varga.label === "neutral" ? "neutral" : "weakening";
+  return { role, improved: rank(d1) <= DIGNITY_RANK.indexOf("neutral") && r > rank(d1) };
 }
 
-/** "friend's sign (compound: great friend)" style text. */
+/** Display text: "own sign", "exalted", or the natural relation with the compound one, "neutral (compound friend)". */
 export function dignityText(d: Dignity): string {
   if (d.natural === null) return d.label === "own" ? "own sign" : d.label;
-  const nat = d.natural === "neutral" ? "neutral sign" : `${d.natural}'s sign`;
-  return d.compound ? `${nat} (compound: ${d.compound})` : nat;
+  return d.compound ? `${d.natural} (compound ${d.compound})` : d.natural;
+}
+
+/** The one dignity given to the AI: the compound relation (or own / exalted / moolatrikona / debilitated). */
+export function dignityFact(d: Dignity): string {
+  if (d.natural === null) return d.label === "own" ? "own sign" : d.label;
+  return d.compound ?? d.natural;
 }

@@ -17,7 +17,9 @@ import { readDashaLord } from "./dasha-lords";
 import { loadKundliFixtures } from "../../tests/fixtures";
 import { careerD10 } from "./timing-checks";
 import { sharedLinks } from "../yogas";
-import { marriageWindows } from "./marriage-timing";
+import { marriageTiming, marriageWindows } from "./marriage-timing";
+import { dhaiyaRanges, sadeSatiRanges } from "./transits";
+import { kundliFacts } from "../ai/facts";
 import { dashaBalanceText } from "../format";
 import { kemadrumaCard } from "../doshas";
 
@@ -142,6 +144,40 @@ describe.skipIf(!present)("regression: case A (local-only fixture)", () => {
     }
   });
 
+  describe("round 3 (Oct 2026)", () => {
+    const r3 = present ? expected.round3 : null!;
+    const asOf = present ? chart.vimshottari.current.as_of : "";
+
+    it("the AI gets one compound dignity; the D9 is judged on its own", () => {
+      const { facts, ctx } = kundliFacts(chart, chart.vimshottari.current, { manglik: null, kaalSarp: null });
+      for (const [n, v] of Object.entries(r3.d10_fact)) expect(ctx.dignities![n].d10, n).toBe(v);
+      const byName = (n: string) => facts.grahas.find((g) => g.graha.includes(`(${n === "Moon" ? "Moon" : n})`))! as Record<string, unknown>;
+      for (const [n, v] of Object.entries(r3.d9_role)) expect(byName(n).navamsa_role, n).toBe(v);
+      expect(facts.grahas.filter((g) => (g as Record<string, unknown>).navamsa_improves_d1).map((g) => g.graha.match(/\((\w+)\)/)![1])).toEqual(r3.d9_improved);
+      expect(JSON.stringify(facts.grahas)).not.toMatch(/compound/);
+      expect(marriageFactors(chart).comparison).toHaveLength(r3.comparison_lines);
+      expect(marriageFactors(chart).comparison.join()).not.toMatch(/weakened/);
+    });
+
+    it("Saturn phases: each once, cut at the span marked; Ashtama names", () => {
+      const ss = sadeSatiRanges(chart, asOf);
+      expect(ss.map((r) => r.label)).toEqual(r3.sade_sati_labels);
+      expect(Boolean(ss.at(-1)!.continuesBeyond)).toBe(r3.last_sade_sati_continues_beyond);
+      expect(dhaiyaRanges(chart, asOf).map((r) => r.label)).toEqual(r3.dhaiya_labels);
+    });
+
+    it("marriage windows: count, and the short overlaps left out", () => {
+      const t = marriageTiming(chart, asOf);
+      expect(t.windows).toHaveLength(r3.windows);
+      expect(t.brief.map((w) => w.start.slice(0, 7))).toEqual(r3.brief_windows);
+    });
+
+    it("text: yogakaraka reason labels D1 and D9 separately", () => {
+      const y = groupYogas(chart, asOf).find((x) => x.key === "yoga.yogakaraka_kendra")!;
+      expect(y.rating.reasons.join()).toContain(r3.yogakaraka_reason);
+    });
+  });
+
   describe("round 2 (Oct 2026)", () => {
     const r2 = present ? expected.round2 : null!;
     const ys = present ? groupYogas(chart, chart.vimshottari.current.as_of) : [];
@@ -158,10 +194,7 @@ describe.skipIf(!present)("regression: case A (local-only fixture)", () => {
       for (const [n, v] of Object.entries(r2.d9_dignity)) expect(s.get(n)!.d9Dignity!.label, n).toBe(v);
       const d10 = careerD10(chart)!;
       expect(d10.lagnaSign).toBe(r2.d10_lagna);
-      for (const [n, v] of Object.entries(r2.d10_dignity)) {
-        const text = d10.planets.find((p) => p.name === n)!.dignity;
-        expect(text === v || text.endsWith(`compound: ${v})`), `${n}: ${text}`).toBe(true);
-      }
+      for (const [n, v] of Object.entries(r2.d10_dignity)) expect(d10.planets.find((p) => p.name === n)!.fact, n).toBe(v);
     });
 
     it("yoga ratings, the level-average arithmetic, Dhana and shared links", () => {
@@ -172,8 +205,7 @@ describe.skipIf(!present)("regression: case A (local-only fixture)", () => {
     });
 
     it("Venus D1 → D9 change", () => {
-      const verdict = { improved: "improved in the D9", weakened: "weakened in the D9", confirmed: "the D9 confirms" }[r2.venus_d9 as "improved"];
-      expect(marriageFactors(chart).comparison[0]).toContain(verdict);
+      expect(marriageFactors(chart).comparison[0]).toContain(r2.venus_d9 === "improved" ? "improved from the D1 (a mitigation)" : "");
     });
 
     it("birth-time minutes, rounded down: D1, D9 and D10", () => {

@@ -48,8 +48,19 @@ E5. The yogakaraka (FACTS.functional_nature.yogakarakas) is the most important f
     benefic: use it in career, Dasha and Manglik discussion where it appears.
 E6. Yogas listed together in FACTS.shared_links rest on the same planetary link: present them
     as one support (say they share the link), never as separate, independent strengths.
-E7. When a planet has strength_borderline, its level is close to a threshold: say its
-    strength is borderline where it matters, and that ratings depending on it are close.
+E7. When a planet has strength_borderline, its level is close to a threshold. Say so ONCE
+    per planet in the whole reading, in the section where its rating first matters; do not
+    repeat "borderline" for that planet elsewhere.
+D1. A planet's dignity (grahas[].dignity, navamsa_dignity, planets_in_d10[].dignity,
+    d9_dignity) is its one compound dignity: use exactly that word (great friend, friend,
+    neutral, enemy, great enemy, own sign, moolatrikona, exalted, debilitated).
+    natural_relation_to_sign_lord is background only; never present it as the dignity.
+D2. The D9 is judged on its own (grahas[].navamsa_role): supportive, neutral or weakening.
+    Call the D9 an improvement only when navamsa_improves_d1 is true, and never call a
+    supportive D9 dignity a weakening factor.
+W1. Marriage timing windows: if you give a number of windows, it must be
+    marriage.timing_windows_count. If marriage.timing_windows_ranked is false, do not rank
+    or compare the windows (no "stronger", "best", "weaker"); present them in date order.
 E8. Write about the chart, never about the method or the data: no phrases such as "not
     computed", "not counted", "recorded as", "FACTS", "rating basis" or "the data shows".
     The page's footnotes explain the method.
@@ -102,9 +113,9 @@ marriage (general relationship themes only, from FACTS.marriage: the D1 7th lord
 with their strength; the D9 Lagna; the D9 7th and its lord with dignity and Vargottama; Venus
 in the D9; the Darakaraka, naming the 7-karaka scheme; the Upapada Lagna. Weigh the D9 against
 the D1 explicitly using marriage.d1_vs_d9. Apply E4 if the birth-time warning is on. If
-marriage.timing_windows is not empty, name the first two or three as traditionally
-indicated periods with their dates exactly as given, the Dasha and the double transit
-behind each, and say whether both Dasha lords are significators),
+marriage.timing_windows is not empty, name them (up to three, in date order) as
+traditionally indicated windows with their dates exactly as given, the Dasha and the double
+transit behind each, and say whether both Dasha lords are significators (rule W1)),
 health_wellbeing (general wellbeing only, end with the doctor sentence),
 current_dasha (the running Mahadasha / Antardasha / Pratyantar Dasha and their end dates
 exactly as in FACTS, read through FACTS.dasha_lords: house lordship, placement, strength,

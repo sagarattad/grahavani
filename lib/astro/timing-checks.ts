@@ -1,6 +1,6 @@
 // Birth-time sensitivity, D10 career factors and transit overlaps.
 import type { Chart } from "../kundlit-schemas";
-import { SIGN_LORD, dignityOf, dignityText, type Planet } from "./relations";
+import { SIGN_LORD, dignityFact, dignityOf, dignityText, isPlanet, type Planet } from "./relations";
 import { houseLords } from "./functional";
 import { byName } from "./rules";
 import { dasamsaSign, navamsaSign, stepBack, tempSigns } from "./varga";
@@ -77,8 +77,16 @@ export type CareerD10 = {
   tenthSign: number;
   tenthLord: Planet;
   /** Key planets in the D10 with their D10 dignity. */
-  planets: { name: string; sign: number; dignity: string }[];
+  /** `dignity` for display ("enemy (compound neutral)"); `fact` is the one compound dignity for the AI. */
+  planets: { name: string; sign: number; dignity: string; fact: string }[];
 };
+
+/** A planet's one D10 dignity (compound relation or own / exalted / …), or undefined without D10 data. */
+export function d10Fact(chart: Chart, name: string): string | undefined {
+  const g = chart.grahas.find((x) => x.name === name);
+  if (!g?.dashamsha || !isPlanet(name)) return undefined;
+  return dignityFact(dignityOf(name, g.dashamsha.sign_num, tempSigns(chart, "d10")));
+}
 
 /** D10 Lagna (computed), its 10th and lord, and the D1 10th lord, Sun, Saturn, Mercury, Jupiter in the D10. */
 export function careerD10(chart: Chart): CareerD10 | null {
@@ -94,7 +102,8 @@ export function careerD10(chart: Chart): CareerD10 | null {
     tenthLord: SIGN_LORD[tenthSign],
     planets: names.map((n) => {
       const g = byName(chart, n);
-      return { name: n, sign: g.dashamsha!.sign_num, dignity: dignityText(dignityOf(n as Planet, g.dashamsha!.sign_num, d10Temp)) };
+      const d = dignityOf(n as Planet, g.dashamsha!.sign_num, d10Temp);
+      return { name: n, sign: g.dashamsha!.sign_num, dignity: dignityText(d), fact: dignityFact(d) };
     }),
   };
 }

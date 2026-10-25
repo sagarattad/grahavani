@@ -95,9 +95,10 @@ export function neechaBhanga(chart: Chart): NeechaBhanga[] {
               why: [!goodHouse && `${p} is in Bhava ${g.house}, not a kendra or trikona`, g.combust && `${p} is combust`].filter(Boolean).join("; "),
             };
       const byPlanet = [...counts].map(([planet, n]) => ({ planet, rules: n }));
-      const multi = byPlanet.filter((x) => x.rules > 1).map((x) => `${x.planet} meets ${x.rules}`);
+      const WORDS = ["", "one", "two", "three", "four", "five", "six"];
+      const multi = byPlanet.filter((x) => x.rules > 1).map((x) => `${x.planet} meets ${WORDS[x.rules] ?? x.rules} of them`);
       const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
-      const countText = `${plural(rules.length, "condition")} from ${plural(byPlanet.length, "planet")}${multi.length ? ` (${multi.join(", ")})` : ""}`;
+      const countText = `${plural(rules.length, "condition")} from ${plural(byPlanet.length, "planet")}${multi.length ? `; ${multi.join("; ")}` : ""}`;
       return { planet: p, state, rules, cancelling: [...cancelling], byPlanet, countText, raja };
     });
 }

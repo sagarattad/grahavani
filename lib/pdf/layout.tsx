@@ -54,11 +54,18 @@ export const s = StyleSheet.create({
   pageNumber: { position: "absolute", left: 32, right: 32, bottom: 18, fontSize: 7, color: C.muted },
 });
 
-/** The PDF font is Latin-only: drop other scripts (e.g. "Pasha (पाश)" → "Pasha"). */
+/**
+ * The PDF font (Noto Sans, Latin subset) has no other scripts and no arrows or
+ * ≤ / ≥: drop other scripts ("Pasha (पाश)" → "Pasha"), spell those symbols in
+ * ASCII, and keep everything the font has, including the minus sign U+2212.
+ */
 export const latin = (text: string) =>
   text
     .replace(/\s*\([^()\x00-\u024F]+\)/g, "")
-    .replace(/[^\x00-\u024F\u2000-\u206F\u20AC\u2122]/g, "")
+    .replace(/→/g, "->")
+    .replace(/≤/g, "<=")
+    .replace(/≥/g, ">=")
+    .replace(/[^\x00-\u024F\u2000-\u206F\u20AC\u2122\u2191\u2193\u2212\u2215]/g, "")
     .trim();
 
 export type PdfPerson = { name: string; birthDate: string; birthTime: string; placeLabel: string };

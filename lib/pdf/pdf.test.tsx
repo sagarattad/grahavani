@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import { renderPdf, pdfDisposition } from "./render";
 import { loadKaalSarpFixtures, loadKundliFixtures, loadManglikFixtures, loadMilanFixtures } from "../../tests/fixtures";
 import { buildDoshas } from "../doshas";
+import { extractText } from "unpdf";
+import { computeManglik } from "../astro/manglik";
+import { latin } from "./layout";
 
 const [k1, k2] = loadKundliFixtures();
 const [m1] = loadManglikFixtures();
@@ -50,6 +53,26 @@ describe("PDF rendering", () => {
     const about = { "yoga.raja": "Traditionally linked with recognition.", manglik: "Calm description." };
     isPdf(await renderPdf({ kind: "kundli", data: { ...data, about, reading: null } }));
   }, 30_000);
+
+  it("keeps minus signs: the Manglik total reads with every term signed", async () => {
+    // Raipur: Mars counts from the Lagna and the Moon, with one cancellation.
+    const raipur = loadKundliFixtures().find((f) => f.file.includes("raipur"))!;
+    const total = computeManglik(raipur.chart).grahavani.steps.at(-1)!;
+    expect(total).toMatch(/^Total \+1 \+ 1 − 1 = 1 → Medium/);
+    const buf = await renderPdf({
+      kind: "kundli",
+      data: { person: person("Test Person"), chart: raipur.chart, dasha: raipur.chart.vimshottari.current, doshas: doshasFor(raipur.chart, null), attribution: raipur.attribution, reading: null },
+    });
+    const { text } = await extractText(new Uint8Array(buf), { mergePages: true });
+    const flat = text.replace(/\s+/g, " ");
+    expect(flat).toContain("Total +1 + 1 − 1 = 1 -> Medium (<= 0 cancelled");
+    expect(flat).toContain(latin(total).replace(/\s+/g, " "));
+  }, 30_000);
+
+  it("latin(): keeps U+2212, spells arrows and ≤ in ASCII, drops other scripts", () => {
+    expect(latin("+1 + 0.5 − 1 − 0.25 = 0.25 → Low (≤ 0)")).toBe("+1 + 0.5 − 1 − 0.25 = 0.25 -> Low (<= 0)");
+    expect(latin("Pasha (पाश) yoga")).toBe("Pasha yoga");
+  });
 
   it("Manglik", async () => {
     const { attribution, ...manglik } = { ...strip(m1), attribution: m1.attribution };

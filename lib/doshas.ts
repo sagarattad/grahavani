@@ -3,16 +3,24 @@
 // (lib/astro/transits.ts); Kaal Sarp comes from Kundlit. Missing data
 // (e.g. a Kaal Sarp call that failed, or a chart saved before transit data was
 // kept) becomes "unavailable" instead of breaking the page.
-import { DOSHAS } from "./glossary";
+import { DOSHAS, rashi } from "./glossary";
 import { dateOnly } from "./format";
 import { activationWindows, type Window } from "./dasha";
 import { computeManglik, INTENSITY_LABEL } from "./astro/manglik";
 import { kemadruma, ord } from "./astro/rules";
-import { dhaiyaRanges, sadeSatiRanges } from "./astro/transits";
+import { dhaiyaRanges, sadeSatiRanges, type PhaseRange } from "./astro/transits";
 import type { Chart, KaalSarp, Manglik } from "./kundlit-schemas";
 import { rateDhaiya, rateKaalSarp, rateKemadruma, rateManglik, rateSadeSati, type DoshaLevel, type Rating } from "./strength";
 
-export type DateRange = { label: string; start: string; end: string; current: boolean };
+export type DateRange = PhaseRange;
+
+/** "Rising: 3 Jun 2027 – 17 Apr 2030 (Saturn leaves the sign meanwhile: back into Meena …; ahead into Vrishabha …)", marking cuts by the computed span. */
+export function rangeText(r: DateRange): string {
+  const from = r.startsBefore ? `before ${dateOnly(r.start)}` : dateOnly(r.start);
+  const to = r.continuesBeyond ? `continues beyond ${dateOnly(r.end)}` : dateOnly(r.end);
+  const dips = r.dips?.map((d) => `${d.direction === "back" ? "back into" : "ahead into"} ${rashi(d.sign)} ${dateOnly(d.start)} – ${dateOnly(d.end)}`);
+  return `${r.label}: ${from} – ${to}${dips?.length ? ` (Saturn leaves the sign meanwhile: ${dips.join("; ")})` : ""}`;
+}
 
 export type DoshaCard = {
   key: keyof typeof DOSHAS;

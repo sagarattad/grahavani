@@ -5,12 +5,13 @@
 // components (Uccha, Dig, Moon's Paksha) are computed for display and for the
 // AI; this is NOT full Shadbala.
 import type { Chart, Graha } from "../kundlit-schemas";
-import { EXALTATION_POINT, SIGN_LORD, dignityOf, dignityText, isPlanet, type Dignity, type Planet } from "./relations";
+import { EXALTATION_POINT, SIGN_LORD, dignityFact, dignityOf, dignityText, isPlanet, type Dignity, type Planet } from "./relations";
 import { neechaBhanga } from "./rules";
 import { tempSigns } from "./varga";
 
 export type StrengthLevel = "strong" | "moderate" | "weak";
-export type Factor = { label: string; points: number };
+/** `label` is shown on the page; `fact` (when different) is what the AI gets: one compound dignity, no natural relation. */
+export type Factor = { label: string; points: number; fact?: string };
 export type PlanetStrength = {
   name: string;
   score: number;
@@ -115,7 +116,7 @@ export function planetStrength(g: Graha, chart: Chart, cache = new Map<string, P
   } else {
     const p = g.name;
     const dignity = dignityOf(p, g.sign_num, signs, g.deg_in_sign);
-    factors.push({ label: dignityText(dignity), points: DIGNITY_POINTS[dignity.label] ?? 0 });
+    factors.push({ label: `D1 ${g.sign}: ${dignityText(dignity)}`, fact: `D1 ${g.sign}: ${dignityFact(dignity)}`, points: DIGNITY_POINTS[dignity.label] ?? 0 });
     if (dignity.label === "debilitated") {
       const nb = neechaBhanga(chart).find((n) => n.planet === p);
       if (nb?.state === "formed") factors.push({ label: `Neecha Bhanga (${nb.countText})`, points: 1.5 });
@@ -125,7 +126,7 @@ export function planetStrength(g: Graha, chart: Chart, cache = new Map<string, P
     const d9Dignity = dignityOf(p, g.navamsha.sign_num, d9Temp);
     if (g.vargottama) factors.push({ label: "Vargottama", points: 1 });
     const d9p = D9_POINTS[d9Dignity.label] ?? 0;
-    if (d9p !== 0) factors.push({ label: `D9 ${g.navamsha.sign}: ${dignityText(d9Dignity)}`, points: d9p });
+    if (d9p !== 0) factors.push({ label: `D9 ${g.navamsha.sign}: ${dignityText(d9Dignity)}`, fact: `D9 ${g.navamsha.sign}: ${dignityFact(d9Dignity)}`, points: d9p });
     if (g.retrograde && p !== "Sun" && p !== "Moon") factors.push({ label: "retrograde (cheshta)", points: 0.5 });
 
     const elong = p === "Moon" ? moonElongation(chart) : null;

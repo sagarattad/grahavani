@@ -7,7 +7,7 @@ import { RatingLine } from "./rating";
 import { RATING_NOTE } from "@/lib/strength";
 import { loadDoshaData } from "@/lib/cache";
 import { ABOUT_DOSHA_STATUSES } from "@/lib/ai/about";
-import { buildDoshas, type DoshaCard } from "@/lib/doshas";
+import { buildDoshas, rangeText, type DoshaCard } from "@/lib/doshas";
 import { dateOnly } from "@/lib/format";
 import type { BirthChart } from "@/lib/generated/prisma/client";
 
@@ -54,7 +54,7 @@ export function DoshaCards({ cards }: { cards: DoshaCard[] }) {
                 <ul className="mt-2 space-y-0.5 text-xs">
                   {c.ranges.map((r) => (
                     <li key={r.label + r.start} className={r.current ? "font-semibold text-bad" : ""}>
-                      {r.label}: {dateOnly(r.start)} – {dateOnly(r.end)}
+                      {rangeText(r)}
                       {r.current && " (running now)"}
                     </li>
                   ))}

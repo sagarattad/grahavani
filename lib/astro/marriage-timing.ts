@@ -79,6 +79,11 @@ export type MarriageWindow = {
  * at the same time. A Mahadasha lord alone never qualifies its Antardashas.
  */
 export function marriageWindows(chart: Chart, asOf: string, limit = 6): MarriageWindow[] {
+  return marriageTiming(chart, asOf, limit).windows;
+}
+
+/** The windows, plus the overlaps left out for being shorter than MIN_WINDOW_DAYS. */
+export function marriageTiming(chart: Chart, asOf: string, limit = 6): { windows: MarriageWindow[]; brief: MarriageWindow[] } {
   const { timeline } = chart.vimshottari;
   const now = ms(asOf);
   const i = Math.max(timeline.findIndex((p) => contains(p, now)), 0);
@@ -126,8 +131,7 @@ export function marriageWindows(chart: Chart, asOf: string, limit = 6): Marriage
     }
   }
   // A few days or weeks between retrograde ingresses is not a usable window.
-  return out
-    .filter((w) => ms(w.end) - ms(w.start) >= MIN_WINDOW_DAYS * 86400_000)
-    .sort((x, y) => ms(x.start) - ms(y.start))
-    .slice(0, limit);
+  const long = (w: MarriageWindow) => ms(w.end) - ms(w.start) >= MIN_WINDOW_DAYS * 86400_000;
+  const sorted = out.sort((x, y) => ms(x.start) - ms(y.start));
+  return { windows: sorted.filter(long).slice(0, limit), brief: sorted.filter((w) => !long(w)) };
 }

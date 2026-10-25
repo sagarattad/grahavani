@@ -93,6 +93,26 @@ const META_CASED_RE = /\bFACTS\b/;
 const DIG_CLAIM_RE = /\b(?:(?:low|weak|poor|little|high|strong|good|full)\s+(?:directional strength|dig\s*bala)|(?:directional strength|dig\s*bala)\s+(?:is\s+|of\s+)?(?:low|weak|poor|high|strong|good|full))\b/i;
 const GRAHA_NAME_RE = new RegExp(`\\b(${GRAHA_RE})\\b`, "gi");
 
+// A dignity word attached to a planet ("in an enemy's sign", "neutral dignity", "compound: friend").
+const DIGNITY_WORD_RE = /\b(?:(great enemy|great friend|enemy|friend|neutral)(?:['’]s)?\s+(?:sign|rashi|dignity)|compound:?\s+(great enemy|great friend|enemy|friend|neutral))\b/gi;
+// "two windows", "3 timing windows"
+const WINDOW_COUNT_RE = /\b(one|two|three|four|five|six|seven|eight|\d{1,2})\s+(?:[a-z-]+\s+){0,3}?windows?\b/gi;
+const NUMBER_WORDS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight"];
+const RANK_WORD_RE = /\b(strong(?:er|est)|best|better|weak(?:er|est)|worse|worst|most promising)\b/i;
+
+/**
+ * The planet a word at `at` is about: the one named nearest before it within
+ * `maxBefore` characters, else the first one named within `maxAfter` after it.
+ * A word further from any planet name ("the 10th lord's great enemy dignity")
+ * is left unattributed.
+ */
+function planetNear(sentence: string, at: number, maxBefore = 45, maxAfter = 25): string | undefined {
+  const names = [...sentence.matchAll(GRAHA_NAME_RE)].map((m) => ({ at: m.index!, end: m.index! + m[0].length, api: grahaAlias.get(m[1].toLowerCase().replace(/\s+/g, " ")) }));
+  const before = names.filter((n) => n.end <= at && at - n.end <= maxBefore);
+  if (before.length) return before[before.length - 1].api;
+  return names.find((n) => n.at > at && n.at - at <= maxAfter)?.api;
+}
+
 // Every Yoga / Dosha name the app knows, so naming an unrated one (e.g. "Neechabhanga
 // Raj Yoga" in a chart that only has "Raj Yoga") counts as its own item.
 const KNOWN_ITEM_NAMES = [...YOGA_CHECKLIST.map((c) => c.label.en), ...Object.values(DOSHAS).map((d) => d.en), "Nadi Dosha", "Bhakoot Dosha"]
@@ -179,7 +199,8 @@ const sentencesOf = (text: string) => text.split(/(?<=[.!?;])\s+|\n+/).filter(Bo
 
 const D9_RE = /navamsa|navamsha|\bd-?9\b/i;
 const D10_RE = /dashamsha|dasamsa|dashamsa|\bd-?10\b/i;
-const D1_RE = /\bd-?1\b|birth chart|rashi chart/i;
+// Only an explicit "in the D1 / birth chart" switches back to the D1 ("improved from the D1" does not).
+const D1_RE = /\bin (?:the |your )?(?:d-?1(?: chart)?|birth chart|rashi chart|lagna chart)\b/i;
 
 /**
  * Sentences with the divisional charts they may refer to. A sentence naming
@@ -221,6 +242,7 @@ export function validateReading(output: unknown, ctx: ValidationContext): string
   // 0. Ratings: fixed phrases must match FACTS (checked per text field).
   if (ctx.ratings?.length) for (const field of collectStrings(output)) problems.push(...checkRatings(field, ctx.ratings));
 
+  const borderline = new Map<string, number>();
   for (const { sentence, d9, d10 } of sentencesWithVarga(collectStrings(output))) {
     // Never present a rating as Shadbala.
     if (SHADBALA_RE.test(sentence) && RATING_WORD_RE.test(sentence) && !NOT_COVERED_RE.test(sentence))
@@ -235,6 +257,34 @@ export function validateReading(output: unknown, ctx: ValidationContext): string
       const named = [...new Set([...sentence.matchAll(GRAHA_NAME_RE)].map((m) => grahaAlias.get(m[1].toLowerCase().replace(/\s+/g, " "))).filter(Boolean))];
       if (named.length && !named.some((n) => ctx.digBalaFactor!.includes(n!)))
         problems.push(`"${sentence.slice(0, 80)}" claims a Dig bala that is not among ${named.join(", ")}'s strength factors`);
+    }
+
+    // A planet's dignity word must be its compound dignity in a chart the sentence is about (rule D1).
+    if (ctx.dignities) {
+      for (const m of sentence.matchAll(DIGNITY_WORD_RE)) {
+        const word = (m[1] ?? m[2]).toLowerCase();
+        const api = planetNear(sentence, m.index!);
+        const dg = api ? ctx.dignities[api] : undefined;
+        if (!dg) continue;
+        const allowed = [dg.d1, d9 ? dg.d9 : undefined, d10 ? dg.d10 : undefined].filter(Boolean);
+        if (!allowed.includes(word)) problems.push(`"${m[0]}" for ${api}: its dignity is ${allowed.join(" / ")} (use the compound dignity from FACTS)`);
+      }
+    }
+
+    // Window count and ranking must follow FACTS.marriage (rule W1).
+    if (ctx.windows) {
+      for (const m of sentence.matchAll(WINDOW_COUNT_RE)) {
+        const n = /^\d+$/.test(m[1]) ? Number(m[1]) : NUMBER_WORDS.indexOf(m[1].toLowerCase());
+        if (n !== ctx.windows.count) problems.push(`"${m[0]}": there are ${ctx.windows.count} timing windows`);
+      }
+      if (!ctx.windows.ranked && /\bwindows?\b/i.test(sentence) && RANK_WORD_RE.test(sentence))
+        problems.push(`"${sentence.slice(0, 80)}" ranks timing windows, but none ranks above another`);
+    }
+
+    // "Borderline" once per planet, where its rating first matters (rule E7).
+    for (const m of sentence.matchAll(/\bborderline\b/gi)) {
+      const api = planetNear(sentence, m.index!);
+      if (api) borderline.set(api, (borderline.get(api) ?? 0) + 1);
     }
 
     // No absolute negative verdicts (they need several strong factors, which the prompt asks to name).
@@ -298,6 +348,8 @@ export function validateReading(output: unknown, ctx: ValidationContext): string
       }
     }
   }
+  for (const [api, n] of borderline) if (n > 1) problems.push(`${api} is called borderline ${n} times; say it once, where its rating first matters`);
+
   // 6. Dates: every date must be one that appears in FACTS (or a birth date).
   if (ctx.allowedDates) problems.push(...checkDates(collectStrings(output).join("\n"), ctx.allowedDates));
 

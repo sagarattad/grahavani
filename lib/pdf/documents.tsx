@@ -18,7 +18,7 @@ import { nearNakshatraBoundary, nearSignBoundary } from "../accuracy";
 import { MANGLIK_CHECKS, comparedText, doshaState, manglikCombined, manglikStatus, sortKoots } from "../summaries";
 import { sharedLinks, yogaChecklist } from "../yogas";
 import { windowText } from "../periods";
-import type { DoshaCard } from "../doshas";
+import { rangeText, type DoshaCard } from "../doshas";
 import { ABOUT_DOSHA_STATUSES, type AboutTexts } from "../ai/about";
 import { PARTIAL_POINTS_NOTE, RATING_NOTE, rateKootDosha, type Rating } from "../strength";
 import { chartStrengths } from "../astro/planet-strength";
@@ -26,7 +26,7 @@ import { dignityText } from "../astro/relations";
 import { functionalNature } from "../astro/functional";
 import { ownHouseLords } from "../astro/rules";
 import { atmakaraka, marriageFactors } from "../astro/marriage";
-import { marriageWindows } from "../astro/marriage-timing";
+import { MIN_WINDOW_DAYS, marriageTiming } from "../astro/marriage-timing";
 import { birthTimeCheck, careerD10, transitOverlaps } from "../astro/timing-checks";
 import { readDashaLord } from "../astro/dasha-lords";
 import { groupYogas } from "../yogas";
@@ -474,7 +474,7 @@ function PdfDoshas({ title, cards, about }: { title: string; cards: DoshaCard[];
           {c.windows.length > 0 && <Text style={s.small}>Traditionally felt in: {c.windows.map(windowText).join("; ")}</Text>}
           {c.ranges.map((r) => (
             <Text key={r.label + r.start} style={s.small}>
-              {r.label}: {dateOnly(r.start)} – {dateOnly(r.end)}
+              {latin(rangeText(r))}
               {r.current ? " (running now)" : ""}
             </Text>
           ))}
@@ -491,7 +491,7 @@ function PdfDoshas({ title, cards, about }: { title: string; cards: DoshaCard[];
 
 /** "Grahavani's classical rating: Moderate. Why: …" (yogas) or "Intensity: Low. Why: …" (doshas). */
 function RatingText({ rating, label }: { rating: Rating<string>; label: string }) {
-  const why = rating.reasons.map((r) => latin(r.replace(/−/g, "-"))).join("; ");
+  const why = rating.reasons.map((r) => latin(r)).join("; ");
   return (
     <Text style={s.small}>
       <Text style={s.bold}>{label ? `${label}${rating.level ?? "Not rated"}` : rating.label}</Text>
@@ -503,7 +503,7 @@ function RatingText({ rating, label }: { rating: Rating<string>; label: string }
 /** Marriage (D1 and Navamsa, Darakaraka, Upapada) and career (D10) factors. */
 function PdfMarriageCareer({ chart, asOf }: { chart: Chart; asOf: string }) {
   const m = marriageFactors(chart);
-  const windows = marriageWindows(chart, asOf);
+  const { windows, brief } = marriageTiming(chart, asOf);
   const d10 = careerD10(chart);
   const bt = birthTimeCheck(chart, rashi);
   return (
@@ -549,7 +549,9 @@ function PdfMarriageCareer({ chart, asOf }: { chart: Chart; asOf: string }) {
         <Text style={s.small}>No double transit falls in a significator&apos;s Antardasha over the current and next Mahadasha.</Text>
       )}
       <Text style={s.small}>
-        A window is an Antardasha whose lord is a marriage significator while Jupiter and Saturn both occupy or aspect the same target from the Lagna (the 7th house, or the sign the 7th lord occupies). Traditional indicators only.
+        A window is an Antardasha whose lord is a marriage significator while Jupiter and Saturn both occupy or aspect the same target from the Lagna (the 7th house, or the sign the 7th lord occupies). Overlaps shorter than {MIN_WINDOW_DAYS} days are left out
+        {brief.length ? ` (${brief.length} here: ${brief.map((w) => `${dateOnly(w.start)} – ${dateOnly(w.end)}`).join("; ")})` : ""}. Windows are not ranked beyond whether
+        both Dasha lords are significators. Traditional indicators only.
       </Text>
     </Section>
   );

@@ -7,7 +7,7 @@ import { dateOnly } from "@/lib/format";
 import { functionalNature } from "@/lib/astro/functional";
 import { ownHouseLords } from "@/lib/astro/rules";
 import { atmakaraka, marriageFactors } from "@/lib/astro/marriage";
-import { marriageSignificators, marriageWindows } from "@/lib/astro/marriage-timing";
+import { MIN_WINDOW_DAYS, marriageSignificators, marriageTiming } from "@/lib/astro/marriage-timing";
 import {
   birthTimeCheck,
   careerD10,
@@ -91,7 +91,7 @@ export function MarriageCareerSection({ chart, asOf }: { chart: Chart; asOf: str
   const d10 = careerD10(chart);
   const bt = birthTimeCheck(chart, rashi);
   const sig = marriageSignificators(chart);
-  const windows = marriageWindows(chart, asOf);
+  const { windows, brief } = marriageTiming(chart, asOf);
   return (
     <Section title="Marriage and career factors (D9 / D10)">
       <h3 className="mb-2 text-sm font-bold">Marriage (D1 and Navamsa)</h3>
@@ -165,7 +165,13 @@ export function MarriageCareerSection({ chart, asOf }: { chart: Chart; asOf: str
         A window is an Antardasha whose lord is a marriage significator (
         {[...sig.primary.keys()].map(graha).join(", ")}) while Jupiter and
         Saturn both occupy or aspect the same target from the Lagna: the 7th
-        house, or the sign the 7th lord occupies. Traditional indicators only.
+        house, or the sign the 7th lord occupies. Overlaps shorter than{" "}
+        {MIN_WINDOW_DAYS} days are left out
+        {brief.length
+          ? ` (${brief.length} here: ${brief.map((w) => `${dateOnly(w.start)} – ${dateOnly(w.end)}`).join("; ")})`
+          : ""}
+        . Windows are not ranked beyond whether both Dasha lords are
+        significators. Traditional indicators only.
       </p>
       <h3 className="mb-2 mt-5 text-sm font-bold">Career (D10, Dashamsha)</h3>
       {d10 && bt?.sensitive.d10 && (

@@ -11,7 +11,7 @@ import type { ValidationContext } from "./facts";
 import { rateKootDosha, ratingPhrase } from "../strength";
 import type { Chart, KaalSarp, Manglik, Milan } from "../kundlit-schemas";
 import { chartStrengths } from "../astro/planet-strength";
-import { dignityText } from "../astro/relations";
+import { dignityFact } from "../astro/relations";
 
 export type AboutTexts = Record<string, string>; // item key → text
 
@@ -81,7 +81,7 @@ export function aboutFacts(chart: Chart, items: AboutItem[]) {
     // Grahavani's dignity (BPHS degree zones, compound relation), not Kundlit's coarser class.
     grahas: chart.grahas.map((x) => {
       const d = strengths.get(x.name)?.dignity;
-      return { graha: g(x.name), rashi: rashi(x.sign_num), bhava: x.house, dignity: d ? dignityText(d) : "node" };
+      return { graha: g(x.name), rashi: rashi(x.sign_num), bhava: x.house, dignity: d ? dignityFact(d) : "node" };
     }),
     bhava_lords: Object.fromEntries(Object.entries(chart.functional.house_lords).map(([h, l]) => [h, graha(l)])),
     items,

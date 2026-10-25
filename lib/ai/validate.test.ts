@@ -279,6 +279,40 @@ describe("evidence rules (Oct 2026 review)", () => {
     if (listed.length) expect(check(`${listed[0]} has low directional strength.`)).toEqual([]);
   });
 
+  it("a planet's dignity word must be its compound dignity (rule D1)", () => {
+    const sun = kundliCtx.dignities!.Sun.d1!;
+    const wrong = ["great friend", "friend", "neutral", "enemy", "great enemy"].find((w) => w !== sun)!;
+    expect(check(`Surya is in a ${wrong}'s sign.`).join()).toMatch(/its dignity is/);
+    if (["great friend", "friend", "neutral", "enemy", "great enemy"].includes(sun)) expect(check(`Surya is in a ${sun}'s sign.`)).toEqual([]);
+    // A D10 claim is checked against the D10 dignity.
+    const d10 = kundliCtx.dignities!.Saturn.d10!;
+    if (["great friend", "friend", "neutral", "enemy", "great enemy"].includes(d10)) expect(check(`In the D10, Shani is in a ${d10} sign.`)).toEqual([]);
+  });
+
+  it("dignity words far from a planet name, and comparisons with the D1, are not misread (live failures)", () => {
+    const venusD9 = kundliCtx.placements.find((p) => p.graha === "Venus" && p.chart === "d9")!.rashi;
+    const d1Venus = kundliCtx.placements.find((p) => p.graha === "Venus" && p.chart === "d1")!.rashi;
+    if (venusD9 !== d1Venus) {
+      expect(check(`The D9 is read next. Shukra in ${venusD9} is better, an improvement over D1.`)).toEqual([]);
+      expect(check(`The D9 is read next. Shukra in ${venusD9} is neutral, improved from D1.`)).toEqual([]);
+    }
+    expect(check("The main weaknesses are weak Shukra, the seventh lord in Bhava 8, and the D10 tenth lord's great enemy dignity.").join()).not.toMatch(/for Venus/);
+  });
+
+  it("window count and ranking follow FACTS (rule W1)", () => {
+    const ctx = { ...kundliCtx, windows: { count: 3, ranked: false } };
+    const c = (t: string) => validateReading({ marriage: t }, ctx);
+    expect(c("There are three traditionally indicated windows.")).toEqual([]);
+    expect(c("There are two windows.").join()).toMatch(/there are 3 timing windows/);
+    expect(c("The 2036 window is stronger.").join()).toMatch(/ranks timing windows/);
+    expect(validateReading({ marriage: "The 2036 window is stronger." }, { ...ctx, windows: { count: 3, ranked: true } })).toEqual([]);
+  });
+
+  it("borderline is said once per planet (rule E7)", () => {
+    expect(validateReading({ personality: "Chandra is borderline.", summary: "Chandra's strength is borderline." }, kundliCtx).join()).toMatch(/Moon is called borderline 2 times/);
+    expect(validateReading({ personality: "Chandra is borderline.", summary: "Budh is borderline." }, kundliCtx)).toEqual([]);
+  });
+
   it("method wording stays out of the reading", () => {
     expect(check("Sarvashtakavarga is not computed here.").join()).toMatch(/describes the method/);
     expect(check("Rahu is explicitly not counted.").join()).toMatch(/describes the method/);
