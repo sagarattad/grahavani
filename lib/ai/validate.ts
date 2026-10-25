@@ -79,7 +79,11 @@ export const normRating = (m: RegExpMatchArray) => (m[1] ? `rated ${cap(m[1])}` 
 // with a rating word is rejected unless it says Shadbala is not covered.
 const SHADBALA_RE = /shadbala/i;
 const RATING_WORD_RE = /\b(rating|rated|intensity|strong|moderate|weak|high|medium|low)\b/i;
-const NOT_COVERED_RE = /\b(not|isn['’]t|no|never|doesn['’]t|different|separate|without)\b/i;
+// "partial Shadbala components" (Uccha, Dig, Paksha) are in FACTS and may be named.
+const NOT_COVERED_RE = /\b(not|isn['’]t|no|never|doesn['’]t|different|separate|without|partial)\b/i;
+
+// Absolute or deterministic negative phrasing (item 11 of the Oct 2026 review).
+const DETERMINISTIC_RE = /\b(very little results?|marked difficult(?:y|ies)|will (?:never|certainly|definitely)\b[^.]*|is (?:certain|guaranteed|bound) to|no chance of)\b/i;
 
 // Every Yoga / Dosha name the app knows, so naming an unrated one (e.g. "Neechabhanga
 // Raj Yoga" in a chart that only has "Raj Yoga") counts as its own item.
@@ -181,12 +185,17 @@ export function validateReading(output: unknown, ctx: ValidationContext): string
     if (SHADBALA_RE.test(sentence) && RATING_WORD_RE.test(sentence) && !NOT_COVERED_RE.test(sentence))
       problems.push(`"${sentence.slice(0, 80)}" presents a rating as Shadbala`);
 
-    // 2. Graha–Rashi / Graha–Bhava pairs must exist in the facts.
+    // No absolute negative verdicts (they need several strong factors, which the prompt asks to name).
+    const absolute = sentence.match(DETERMINISTIC_RE);
+    if (absolute) problems.push(`"${absolute[0]}" is an absolute negative; describe the factors and their balance instead`);
+
+    // 2. Graha–Rashi / Graha–Bhava pairs must exist in the facts (D9 / D10 when the sentence names them).
     const mentionsD9 = /navamsa|navamsha|\bd9\b/i.test(sentence);
+    const mentionsD10 = /dashamsha|dasamsa|dashamsa|\bd10\b/i.test(sentence);
     for (const m of sentence.matchAll(PLACEMENT_RE)) {
       const api = grahaAlias.get(m[1].toLowerCase().replace(/\s+/g, " "));
       if (!api) continue;
-      const mine = ctx.placements.filter((p) => p.graha === api && (p.chart === "d1" || mentionsD9));
+      const mine = ctx.placements.filter((p) => p.graha === api && (p.chart === "d1" || (mentionsD9 && p.chart === "d9") || (mentionsD10 && p.chart === "d10")));
       if (m[2]) {
         const r = rashiAlias.get(m[2].toLowerCase());
         if (r && !mine.some((p) => p.rashi === r)) problems.push(`"${m[0]}" is not in the computed facts`);

@@ -17,7 +17,8 @@ describe.each(loadKundliFixtures())("Vimshottari split: $file", ({ chart }) => {
   it("computed current Antardasha matches Kundlit (lord and dates)", () => {
     const ad = antardashas(md, timeline).find((p) => contains(p, now))!;
     expect(ad.lord).toBe(current.antardasha.lord);
-    expect(Math.abs(ms(ad.start) - ms(current.antardasha.start))).toBeLessThan(TWO_MIN);
+    // Kundlit gives an Antardasha running at birth its unclipped start.
+    expect(Math.abs(ms(ad.fullStart ?? ad.start) - ms(current.antardasha.start))).toBeLessThan(TWO_MIN);
     expect(Math.abs(ms(ad.end) - ms(current.antardasha.end))).toBeLessThan(TWO_MIN);
   });
 

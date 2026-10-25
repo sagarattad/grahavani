@@ -4,6 +4,7 @@ import { birthKey, pairKey } from "./ids";
 import { getKundli, getCurrentDasha, getKaalSarp, getManglik, getMilan, type Birth } from "./kundlit";
 import type { BirthChart, KaalSarpResult, ManglikResult } from "./generated/prisma/client";
 import { kaalSarpSchema, manglikSchema, type Chart, type DashaCurrent, type KaalSarp, type Manglik } from "./kundlit-schemas";
+import { computeManglik, type ManglikResult as ManglikComputed } from "./astro/manglik";
 
 // Every Kundlit result is stored once and shared: a chart, Manglik and Kaal
 // Sarp result per birth, a Milan result per couple.
@@ -105,13 +106,13 @@ const YEAR_MS = 365 * 86400_000;
 /**
  * Sade Sati / Dhaiya dates come from the chart's transit block, computed by
  * Kundlit as of the call date (10 years ahead), and the classical rating needs
- * each graha's Baladi avastha. Charts saved before we kept either, or with
+ * each graha's Baladi avastha and aspects. Charts saved before we kept these, or with
  * transit data older than a year, are re-fetched once. Dasha data is untouched.
  */
 export async function ensureChartComplete(row: BirthChart): Promise<Chart> {
   const chart = chartOf(row);
   const transitFresh = chart.transit && Date.now() - new Date(chart.transit.as_of).getTime() < YEAR_MS;
-  if (transitFresh && chart.grahas.every((g) => g.avastha)) return chart;
+  if (transitFresh && chart.grahas.every((g) => g.avastha && g.aspect_grahas)) return chart;
   const fresh = await getKundli(birthOf(row));
   await db.birthChart.update({ where: { id: row.id }, data: { chart: fresh.chart, attribution: fresh.attribution } });
   return fresh.chart;
@@ -128,19 +129,21 @@ export async function completedChartRow(row: BirthChart): Promise<{ row: BirthCh
   }
 }
 
-export type DoshaData = { chart: Chart; manglik: Manglik | null; kaalSarp: KaalSarp | null };
+export type DoshaData = { chart: Chart; manglik: ManglikComputed; kaalSarp: KaalSarp | null };
 
 /**
  * Everything the Doshas section needs, fetched in parallel. A failed call
  * (e.g. Kundlit busy) becomes null so the page shows "Not available" instead
- * of failing.
+ * of failing. Manglik is Grahavani's own (lib/astro/manglik.ts), computed from
+ * the chart, so it needs no Kundlit call.
  */
 export async function loadDoshaData(row: BirthChart): Promise<DoshaData> {
-  const [m, k, t] = await Promise.allSettled([getOrCreateManglik(row), getOrCreateKaalSarp(row), ensureChartComplete(row)]);
-  for (const r of [m, k, t]) if (r.status === "rejected") console.warn("dosha_data_unavailable", (r.reason as Error)?.message);
+  const [k, t] = await Promise.allSettled([getOrCreateKaalSarp(row), ensureChartComplete(row)]);
+  for (const r of [k, t]) if (r.status === "rejected") console.warn("dosha_data_unavailable", (r.reason as Error)?.message);
+  const chart = t.status === "fulfilled" ? t.value : chartOf(row);
   return {
-    manglik: m.status === "fulfilled" ? manglikOf(m.value) : null,
+    manglik: computeManglik(chart),
     kaalSarp: k.status === "fulfilled" ? kaalSarpOf(k.value) : null,
-    chart: t.status === "fulfilled" ? t.value : chartOf(row),
+    chart,
   };
 }

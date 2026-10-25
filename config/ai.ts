@@ -28,7 +28,7 @@ export const PRICES: Record<string, { input: number; output: number }> = {
   "gemini-3.8-flash": { input: 0, output: 0 },
 };
 
-export const PROMPT_VERSION = "v7"; // v3: ratings in fixed phrases; v4: direct tone; v5: karmic perspective; v6: no positive spin; v7: positivity rules removed
+export const PROMPT_VERSION = "v8"; // v3: ratings in fixed phrases; v4: direct tone; v5: karmic perspective; v6: no positive spin; v7: positivity rules removed; v8: evidence rules, D9 / D10, Dasha lords, transits
 // Separate version for the About texts, so changing them never regenerates readings.
 export const ABOUT_PROMPT_VERSION = "a6"; // a3: longer, plain-language texts; a4: ratings; a5: direct tone; a6: rating first, no positive spin
 

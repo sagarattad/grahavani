@@ -3,13 +3,16 @@ import { Tabs } from "./Tabs";
 import { Chip, Note, Section, Term } from "./ui";
 import { PlaceEdit } from "./PlaceEdit";
 import { d1Houses, d9Houses } from "@/lib/chart/northIndian";
-import { dignity, graha, grahaWithMeaning, nakshatra, rashi } from "@/lib/glossary";
+import { graha, grahaWithMeaning, nakshatra, rashi } from "@/lib/glossary";
 import { birthDateTime, dateOnly, dms, ymd } from "@/lib/format";
 import { antardashas, contains } from "@/lib/dasha";
 import { yogaChecklist } from "@/lib/yogas";
 import { WindowList } from "./periods";
 import { AboutToggle } from "./About";
 import { RatingLine } from "./rating";
+import { DashaLords, FunctionalNature, birthTimeNotes } from "./analysis";
+import { chartStrengths } from "@/lib/astro/planet-strength";
+import { dignityText } from "@/lib/astro/relations";
 import { RATING_NOTE } from "@/lib/strength";
 import { nearSignBoundary } from "@/lib/accuracy";
 import type { Chart, DashaCurrent } from "@/lib/kundlit-schemas";
@@ -50,6 +53,7 @@ export function BoundaryNotes({ chart }: { chart: Chart }) {
   const items = [
     nearSignBoundary(chart.lagna.deg_in_sign) && `Lagna is at ${dms(chart.lagna.deg_in_sign)} in ${rashi(chart.lagna.sign_num)}, close to a Rashi boundary.`,
     nearSignBoundary(moon.deg_in_sign) && `Chandra (Moon) is at ${dms(moon.deg_in_sign)} in ${rashi(moon.sign_num)}, close to a Rashi boundary.`,
+    ...birthTimeNotes(chart),
   ].filter(Boolean) as string[];
   if (!items.length) return null;
   return (
@@ -84,6 +88,7 @@ export function ChartsSection({ chart }: { chart: Chart }) {
 }
 
 export function PlanetTable({ chart }: { chart: Chart }) {
+  const strengths = chartStrengths(chart);
   return (
     <Section
       title={
@@ -93,7 +98,7 @@ export function PlanetTable({ chart }: { chart: Chart }) {
       }
     >
       <div className="-mx-4 overflow-x-auto px-4">
-        <table className="w-full min-w-[620px] text-left text-sm">
+        <table className="w-full min-w-[760px] text-left text-sm">
           <thead className="text-xs text-muted">
             <tr className="border-b border-border">
               <th className="sticky left-0 bg-surface py-2 pr-2">Graha</th>
@@ -109,7 +114,9 @@ export function PlanetTable({ chart }: { chart: Chart }) {
               </th>
               <th className="py-2 pr-2" title="Vakri (retrograde)">R</th>
               <th className="py-2 pr-2" title="Asta (combust)">C</th>
-              <th className="py-2" title="Baladi avastha: the graha's age state">Avastha</th>
+              <th className="py-2 pr-2">D9 dignity</th>
+              <th className="py-2 pr-2" title="Grahavani's composite strength (not full Shadbala)">Strength</th>
+              <th className="py-2" title="Baladi avastha: the graha's age state (a minor factor)">Avastha</th>
             </tr>
           </thead>
           <tbody>
@@ -124,12 +131,16 @@ export function PlanetTable({ chart }: { chart: Chart }) {
               <td />
               <td />
               <td />
+              <td />
+              <td />
             </tr>
-            {chart.grahas.map((g) => (
+            {chart.grahas.map((g) => {
+              const s = strengths.get(g.name)!;
+              return (
               <tr key={g.name} className="border-b border-border/60">
                 <td className="sticky left-0 bg-surface py-2 pr-2 font-semibold">
                   {grahaWithMeaning(g.name)}
-                  {g.dignity !== "neutral" && <span className="block text-xs font-normal text-muted">{dignity(g.dignity)}</span>}
+                  {s.dignity && <span className="block text-xs font-normal text-muted">{dignityText(s.dignity)}</span>}
                 </td>
                 <td className="py-2 pr-2">{rashi(g.sign_num)}</td>
                 <td className="py-2 pr-2">{dms(g.deg_in_sign)}</td>
@@ -139,15 +150,32 @@ export function PlanetTable({ chart }: { chart: Chart }) {
                 <td className="py-2 pr-2">{g.house}</td>
                 <td className="py-2 pr-2">{g.retrograde ? "R" : ""}</td>
                 <td className="py-2 pr-2">{g.combust ? "C" : ""}</td>
+                <td className="py-2 pr-2 text-xs">
+                  {rashi(g.navamsha.sign_num)}
+                  {s.d9Dignity && <span className="block text-muted">{dignityText(s.d9Dignity)}</span>}
+                  {g.vargottama && <span className="block font-semibold text-good">Vargottama</span>}
+                </td>
+                <td className="py-2 pr-2 text-xs" title={s.factors.map((f) => `${f.label} ${f.points > 0 ? "+" : ""}${f.points}`).join("; ")}>
+                  <span className={`font-semibold ${s.level === "strong" ? "text-good" : s.level === "weak" ? "text-bad" : "text-warn"}`}>{s.level}</span>
+                  {s.shadbala.uccha !== null && (
+                    <span className="block text-muted">
+                      U {Math.round(s.shadbala.uccha)} · D {Math.round(s.shadbala.dig!)}
+                      {s.shadbala.paksha !== null && ` · P ${Math.round(s.shadbala.paksha)}`}
+                    </span>
+                  )}
+                </td>
                 <td className="py-2">{g.avastha ?? "—"}</td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>
       <p className="mt-2 text-xs text-muted">
-        R = <Term id="vakri" full />. C = <Term id="asta" full />. Rahu and Ketu always move in reverse. Avastha = Baladi
-        avastha (age state: Bala, Kumara, Yuva, Vriddha, Mrita).
+        R = <Term id="vakri" full />. C = <Term id="asta" full />. Rahu and Ketu always move in reverse. Dignity under each name: natural
+        relation to the sign lord, and the compound (natural + temporary) relation. Strength: Grahavani&apos;s composite (dignity, house, D9,
+        combustion, retrogression, the Moon&apos;s paksha; Baladi avastha minor); hover for the factors. U / D / P = partial Shadbala components
+        (Uccha, Dig, Paksha) in virupas out of 60; full Shadbala and Sarvashtakavarga are not computed.
       </p>
     </Section>
   );
@@ -173,6 +201,7 @@ export function LagnaDetails({ chart }: { chart: Chart }) {
           </div>
         ))}
       </dl>
+      <FunctionalNature chart={chart} />
     </Section>
   );
 }
@@ -202,6 +231,7 @@ export function DashaSection({ chart, current }: { chart: Chart; current: DashaC
           </li>
         ))}
       </ul>
+      <DashaLords chart={chart} current={current} />
       <p className="mb-4 text-xs text-muted">
         Dasha balance at birth: {graha(chart.vimshottari.birth.mahadasha.lord)} Mahadasha, {ymd(chart.vimshottari.birth.mahadasha.balance_ymd)}.
         As of {dateOnly(current.as_of)}. All dates in IST.
@@ -289,7 +319,7 @@ export function YogasSection({ chart, asOf }: { chart: Chart; asOf: string }) {
       </ul>
       {absent.length > 0 && (
         <div className="mt-4">
-          <h3 className="mb-1 text-sm font-bold">Not present in this chart</h3>
+          <h3 className="mb-1 text-sm font-bold">Not formed in this chart</h3>
           <p className="text-sm text-muted">{absent.map((a) => a.name).join(" · ")}</p>
         </div>
       )}

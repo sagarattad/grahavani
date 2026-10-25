@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildDoshas, dhaiyaCard, kaalSarpCard, kemadrumaCard, manglikCard, sadeSatiCard } from "./doshas";
 import { manglikSchema } from "./kundlit-schemas";
-import { loadKaalSarpFixtures, loadKundliFixtures, loadManglikFixtures, rawFixture } from "../tests/fixtures";
+import { loadKaalSarpFixtures, loadKundliFixtures, rawFixture } from "../tests/fixtures";
 
 const fx = loadKundliFixtures();
 const chartOf = (part: string) => fx.find((f) => f.file.includes(part))!.chart;
@@ -9,9 +9,19 @@ const raipur = chartOf("raipur");
 const asOf = raipur.vimshottari.current.as_of;
 
 describe("doshas", () => {
-  it("Kemadruma is present for the Mumbai chart and absent for Raipur", () => {
-    expect(kemadrumaCard(chartOf("mumbai"), asOf).status).toBe("present");
-    expect(kemadrumaCard(raipur, asOf).status).toBe("absent");
+  it("Kemadruma has three states: formed, formed but cancelled (with reasons), not formed", () => {
+    const mumbai = kemadrumaCard(chartOf("mumbai"), asOf);
+    expect(mumbai.status).toBe("cancelled");
+    expect(mumbai.statusLabel).toBe("Formed but cancelled");
+    expect(mumbai.details.join()).toMatch(/Cancellation: Mars is in a kendra \(10th\) from the Moon/);
+    expect(kemadrumaCard(chartOf("1999-04-12"), asOf)).toMatchObject({ status: "absent", statusLabel: "Not formed" });
+    // A genuine uncancelled Kemadruma: no planet 2nd/12th from the Moon and no cancellation.
+    const lonely = {
+      ...raipur,
+      lagna: { ...raipur.lagna, sign_num: 2 },
+      grahas: raipur.grahas.map((g) => ({ ...g, sign_num: g.name === "Moon" ? 1 : g.name === "Sun" || g.name === "Rahu" || g.name === "Ketu" ? g.sign_num : 6, house: g.name === "Moon" ? 12 : 5 })),
+    };
+    expect(kemadrumaCard(lonely, asOf)).toMatchObject({ status: "present", statusLabel: "Formed" });
   });
 
   it("Kaal Sarp: Present fixture and Not-present fixture", () => {
@@ -46,16 +56,18 @@ describe("doshas", () => {
 
   it("missing data becomes 'unavailable', never an error", () => {
     const cards = buildDoshas({ chart: { ...raipur, transit: undefined }, manglik: null, kaalSarp: undefined, asOf });
-    for (const k of ["manglik", "kaalSarp", "sadeSati", "dhaiya"]) {
+    // Manglik is computed from the chart itself, so it is never unavailable.
+    for (const k of ["kaalSarp", "sadeSati", "dhaiya"]) {
       expect(cards.find((c) => c.key === k)!.status, k).toBe("unavailable");
     }
   });
 
-  it("Manglik card shows severity, triggers and Mangal periods", () => {
-    const [m] = loadManglikFixtures();
-    const c = manglikCard(m, raipur, asOf);
-    expect(c.statusLabel).toBe("Present — Mild");
-    expect(c.details[0]).toMatch(/From Lagna/);
+  it("Manglik card: Grahavani's houses, cancellations, reasoning and Mangal periods", () => {
+    const c = manglikCard(raipur, asOf);
+    expect(c.statusLabel).toBe("Present — Medium");
+    expect(c.details[0]).toBe("From Lagna: Mars in the 7th — yes (North Indian set 1, 4, 7, 8, 12)");
+    expect(c.details.join()).toMatch(/Cancellation: Mars in its own or exaltation sign \(tradition-dependent\)/);
+    expect(c.details.join()).toMatch(/Intensity: .*Total 1 → Medium/);
     for (const w of c.windows) expect(w.ad ?? w.md).toBe("Mars");
   });
 });

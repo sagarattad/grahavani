@@ -61,7 +61,7 @@ describe("stripping", () => {
       const raw = JSON.stringify(rawFixture(file)).length;
       const stored = JSON.stringify(chart).length;
       expect(stored).toBeLessThan(15_000);
-      expect(stored).toBeLessThan(raw / 8);
+      expect(stored).toBeLessThan(raw / 6); // aspects and D10 are kept for lib/astro
       expect(JSON.stringify(chart)).not.toContain("citations");
     }
   });

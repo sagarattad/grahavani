@@ -9,6 +9,7 @@ import { Attribution, Skeleton, Term } from "@/components/ui";
 import { BoundaryNotes, ChartsSection, DashaSection, LagnaDetails, PersonHeader, PlanetTable, YogasSection } from "@/components/kundli";
 import { ReadingPanel } from "@/components/ReadingPanel";
 import { DoshasLoader, DoshasSkeleton } from "@/components/doshas";
+import { MarriageCareerSection } from "@/components/analysis";
 import { AboutProvider } from "@/components/About";
 import { FollowupBox } from "@/components/FollowupBox";
 import { ItemActions } from "@/components/ItemActions";
@@ -59,6 +60,7 @@ async function KundliView({ params }: { params: Promise<{ slug: string }> }) {
           <DoshasLoader chartRow={chartRow.row} />
         </Suspense>
       </AboutProvider>
+      <MarriageCareerSection chart={chart} />
       <DashaSection chart={chart} current={dasha} />
       <ReadingPanel kind="kundli" slug={slug} />
       <FollowupBox kind="kundli" slug={slug} />

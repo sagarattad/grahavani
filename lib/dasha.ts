@@ -18,7 +18,8 @@ export const DASHA_YEARS: Record<string, number> = {
 };
 
 export type Period = { lord: string; start: string; end: string };
-export type SubPeriod = Period & { parent: string };
+/** `fullStart`: where a sub-period clipped at birth would have begun (Kundlit reports this as its start). */
+export type SubPeriod = Period & { parent: string; fullStart?: string };
 
 const ms = (iso: string) => new Date(iso).getTime();
 const iso = (t: number) => new Date(t).toISOString();
@@ -46,7 +47,7 @@ function split(parent: Period, fullStart: number, clipFrom: number): SubPeriod[]
   const out: SubPeriod[] = [];
   for (const lord of sequenceFrom(parent.lord)) {
     const next = t + (total * DASHA_YEARS[lord]) / 120;
-    if (next > clipFrom) out.push({ parent: parent.lord, lord, start: iso(Math.max(t, clipFrom)), end: iso(next) });
+    if (next > clipFrom) out.push({ parent: parent.lord, lord, start: iso(Math.max(t, clipFrom)), end: iso(next), ...(t < clipFrom ? { fullStart: iso(t) } : {}) });
     t = next;
   }
   out[out.length - 1].end = parent.end; // remove floating-point drift
@@ -61,10 +62,10 @@ export function antardashas(md: Period, timeline: Period[]): SubPeriod[] {
 }
 
 /**
- * The Pratyantar Dashas of an Antardasha. For an Antardasha clipped at birth,
- * pass `fullStart` (its unclipped start) so proportions stay correct.
+ * The Pratyantar Dashas of an Antardasha. An Antardasha clipped at birth keeps
+ * its unclipped start in `fullStart`, so the proportions stay correct.
  */
-export function pratyantardashas(ad: SubPeriod, fullStart = ms(ad.start)): SubPeriod[] {
+export function pratyantardashas(ad: SubPeriod, fullStart = ms(ad.fullStart ?? ad.start)): SubPeriod[] {
   return split(ad, fullStart, ms(ad.start));
 }
 

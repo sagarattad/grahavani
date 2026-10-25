@@ -40,6 +40,13 @@ const grahaSchema = position.extend({
   avastha: z.string().nullish(),
   navamsha: z.object({ sign: z.string(), sign_num: signNum, lord: z.string() }),
   vargottama: z.boolean(),
+  // Used by Grahavani's own rules (lib/astro). Missing on charts cached before
+  // 25 Oct 2026; lib/cache.ts refreshes them.
+  houses_ruled: z.array(z.number()).nullish(),
+  aspect_houses: z.array(z.number()).nullish(),
+  aspect_grahas: z.array(z.string()).nullish(),
+  sun_separation_deg: z.number().nullish(),
+  dashamsha: z.object({ sign: z.string(), sign_num: signNum, lord: z.string() }).nullish(),
 });
 
 const bhavaSchema = z.object({
@@ -86,6 +93,8 @@ const range = z.object({ start_dt: z.string(), end_dt: z.string(), sign_num: z.n
 const transitSchema = z.object({
   as_of: z.string(),
   sade_sati: z.object({ active: z.boolean(), phase: z.string() }),
+  // Jupiter's current sign only (no dated Jupiter transits from Kundlit).
+  jupiter_cycle: z.object({ sign_num: z.number(), house_from_moon: z.number() }).nullish(),
   // Kundlit lists only periods that END within `horizon_years` of as_of.
   sade_sati_lifecycle: z.object({
     horizon_years: z.number().nullish(),

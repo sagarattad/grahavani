@@ -1,6 +1,6 @@
 import "server-only";
 import { db } from "./db";
-import { ensureFreshDasha, getOrCreateManglik, loadDoshaData, manglikOf } from "./cache";
+import { ensureFreshDasha, getOrCreateManglik, loadDoshaData } from "./cache";
 import { kundliFacts, manglikFacts, milanFacts } from "./ai/facts";
 import type { Milan } from "./kundlit-schemas";
 import type { ReadingKind } from "./ai/schemas";
@@ -53,8 +53,9 @@ export async function factsFor(kind: ReadingKind, slug: string, followup = false
   const p = await loadProfile(slug);
   if (!p) return null;
   if (kind === "manglik") {
-    const mg = p.birthChart.manglik ?? (await getOrCreateManglik(p.birthChart));
-    return { ...manglikFacts(manglikOf(mg), (await loadDoshaData(p.birthChart)).chart, p.birthDate), link: { manglikResultId: mg.id } };
+    // The stored Kundlit row only links cached readings; the facts use Grahavani's computed Manglik.
+    const [mg, doshas] = await Promise.all([p.birthChart.manglik ?? getOrCreateManglik(p.birthChart), loadDoshaData(p.birthChart)]);
+    return { ...manglikFacts(doshas.manglik, doshas.chart, p.birthDate), link: { manglikResultId: mg.id } };
   }
   const [dasha, doshas] = await Promise.all([ensureFreshDasha(p.birthChart), loadDoshaData(p.birthChart)]);
   return {

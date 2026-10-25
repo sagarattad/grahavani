@@ -1,80 +1,33 @@
 // Grahavani's classical rating for present Yogas and Doshas.
-// An interpretive layer on Kundlit's chart data (dignity, house, combustion,
-// Baladi avastha, cancellations), like the Antardasha split. It is NOT
-// Shadbala: Kundlit's strength_score was checked against AstroSage Shadbala
-// and didn't track it (Spearman −0.18), so it is not used. See PLAN.md.
+// Yoga ratings come from the composite strength of every participating planet
+// (lib/astro/planet-strength.ts: dignity with compound relationship, house, D9,
+// combustion, retrogression, paksha; Baladi avastha only a minor input). It is
+// not full Shadbala; partial Shadbala components are shown separately.
 import { graha } from "./glossary";
-import type { Chart, Graha, KaalSarp, Koot, Manglik } from "./kundlit-schemas";
+import type { Chart, KaalSarp, Koot, Manglik } from "./kundlit-schemas";
+import type { ManglikResult } from "./astro/manglik";
+import { chartStrengths, strengthReason, type PlanetStrength, type StrengthLevel } from "./astro/planet-strength";
 
 export type YogaLevel = "Strong" | "Moderate" | "Weak";
 export type DoshaLevel = "High" | "Medium" | "Low";
-export type Rating<L extends string> = { level: L | null; label: string; reasons: string[] };
+export type Rating<L extends string> = {
+  level: L | null;
+  label: string;
+  reasons: string[];
+  /** Yogas: the planets of the combination the rating is based on. */
+  basis?: string[];
+};
 
 export const PARTIAL_POINTS_NOTE =
   "When Nadi or Bhakoot Dosha is cancelled, our calculation (Kundlit) gives partial points (e.g. 4 / 8). Some websites score a cancelled dosha differently, for example as full points or as 0.";
 
 export const RATING_NOTE =
-  "Grahavani's classical rating from Kundlit's chart data (dignity, house, combustion, Baladi avastha, cancellations). It is not Shadbala; schools weigh these differently.";
+  "Grahavani's classical rating: each planet's composite strength (dignity with compound relationship, house, D9 dignity and Vargottama, combustion, retrogression, the Moon's paksha bala; Baladi avastha as a minor factor), and a Yoga is only as strong as the planets that form it. Not full Shadbala; schools weigh these differently.";
 
-const DIGNITY: Record<string, [number, string]> = {
-  exalted: [2, "exalted"],
-  moolatrikona: [2, "moolatrikona"],
-  own: [1.5, "own sign"],
-  friend: [0.5, "friendly sign"],
-  neutral: [0, "neutral sign"],
-  enemy: [-0.5, "enemy sign"],
-  debilitated: [-2, "debilitated"],
-};
-const AVASTHA: Record<string, [number, string]> = {
-  Yuva: [1, "Yuva (full results)"],
-  Kumara: [0.5, "Kumara (half results)"],
-  Bala: [0.25, "Bala (quarter results)"],
-  Vriddha: [0, "Vriddha (little result)"],
-  Mrita: [-0.5, "Mrita (very little result)"],
-};
 const NODES = new Set(["Rahu", "Ketu"]);
-const KENDRA_TRIKONA = new Set([1, 4, 5, 7, 9, 10]);
-const DUSTHANA = new Set([6, 8, 12]);
-
-/** Kendra/trikona +1 (house 1 counted once), dusthana −1, others 0. */
-function housePoints(h: number): [number, string] {
-  if (KENDRA_TRIKONA.has(h)) return [1, `Bhava ${h} (+)`];
-  if (DUSTHANA.has(h)) return [-1, `Bhava ${h} (−)`];
-  return [0, `Bhava ${h}`];
-}
-
-type Mode = "full" | "mahapurusha" | "node";
-
-/** Points and a short reason for one graha. `null` when avastha is missing. */
-export function grahaPoints(g: Graha, mode: Mode = "full"): { points: number; reason: string } | null {
-  const parts: string[] = [];
-  let points = 0;
-  if (mode !== "node" && !g.avastha) return null;
-  if (mode === "full") {
-    const [d, dl] = DIGNITY[g.dignity] ?? [0, g.dignity];
-    points += d;
-    if (g.dignity !== "neutral") parts.push(dl);
-  }
-  if (mode === "full" || mode === "node") {
-    const [h, hl] = housePoints(g.house);
-    points += h;
-    parts.push(hl);
-  }
-  if (mode !== "node") {
-    if (g.combust && g.name !== "Sun") {
-      points -= 1;
-      parts.push("combust");
-    }
-    const [a, al] = AVASTHA[g.avastha!] ?? [0, g.avastha!];
-    points += a;
-    parts.push(al);
-  }
-  return { points, reason: `${graha(g.name)}: ${parts.join(", ")}` };
-}
-
 const YOGA_LEVELS: YogaLevel[] = ["Weak", "Moderate", "Strong"];
+const LEVEL_INDEX: Record<StrengthLevel, number> = { weak: 0, moderate: 1, strong: 2 };
 const MAHAPURUSHA = new Set(["yoga.ruchaka", "yoga.bhadra", "yoga.hamsa", "yoga.malavya", "yoga.sasa"]);
-export const YOGA_THRESHOLDS = { strong: 1.5, moderate: 0.25 };
 
 type RatableYoga = {
   key: string;
@@ -83,42 +36,66 @@ type RatableYoga = {
   combinations: { participants: string[] }[];
 };
 
-const yogaRating = (level: YogaLevel | null, reasons: string[]): Rating<YogaLevel> => ({
+const yogaRating = (level: YogaLevel | null, reasons: string[], basis?: string[]): Rating<YogaLevel> => ({
   level,
   label: level ? `Rated ${level}` : "Not rated",
-  reasons: reasons.slice(0, 4),
+  reasons: reasons.slice(0, 5),
+  ...(basis ? { basis } : {}),
 });
 
-export function rateYoga(y: RatableYoga, chart: Chart): Rating<YogaLevel> {
+/**
+ * A combination's level is the average strength of its planets (Rahu / Ketu
+ * left out when another planet takes part), with two consistency rules:
+ * - it can be Strong only if none of its planets is weak;
+ * - it can be at most one level above its weakest planet.
+ * The yoga takes its best combination; a Bhanga lowers it one level.
+ */
+export function rateYoga(y: RatableYoga, chart: Chart, strengths: Map<string, PlanetStrength> = chartStrengths(chart)): Rating<YogaLevel> {
   if (y.nabhasa) return yogaRating(null, ["Describes the overall pattern of the chart"]);
-  const byName = new Map(chart.grahas.map((g) => [g.name, g]));
-  const maha = MAHAPURUSHA.has(y.key);
 
-  let best: { score: number; reasons: string[] } | null = null;
+  let best: { idx: number; score: number; ps: PlanetStrength[]; capped: string | null } | null = null;
   for (const c of y.combinations) {
     const others = c.participants.filter((p) => !NODES.has(p));
-    const nodeOnly = others.length === 0;
-    const names = nodeOnly ? c.participants : others;
-    const pts = names.map((n) => byName.get(n)).map((g) => (g ? grahaPoints(g, maha ? "mahapurusha" : nodeOnly ? "node" : "full") : null));
-    if (pts.length === 0 || pts.some((p) => p === null)) return yogaRating(null, ["Data unavailable for this chart"]);
-    const score = pts.reduce((s, p) => s + p!.points, 0) / pts.length;
-    if (!best || score > best.score) best = { score, reasons: pts.map((p) => p!.reason) };
+    const names = others.length ? others : c.participants;
+    const ps = names.map((n) => strengths.get(n));
+    if (ps.length === 0 || ps.some((p) => !p)) return yogaRating(null, ["Data unavailable for this chart"]);
+    const list = ps as PlanetStrength[];
+    const score = list.reduce((s, p) => s + p.score, 0) / list.length;
+    const fromAvg = score >= 3 ? 2 : score >= 0.5 ? 1 : 0;
+    const weakest = Math.min(...list.map((p) => LEVEL_INDEX[p.level]));
+    const idx = Math.min(fromAvg, weakest + 1);
+    const weak = list.filter((p) => p.level === "weak").map((p) => graha(p.name));
+    const capped = idx < fromAvg ? `limited by ${weak.join(" and ") || "a weaker planet"} (a yoga is only as strong as its planets)` : null;
+    if (!best || idx > best.idx || (idx === best.idx && score > best.score)) best = { idx, score, ps: list, capped };
   }
   if (!best) return yogaRating(null, ["Data unavailable for this chart"]);
 
-  let idx: number;
-  const reasons = [...best.reasons];
-  if (maha) {
-    reasons.unshift("Pancha Mahapurusha conditions met (own or exalted sign in a kendra)");
-    idx = best.score >= 0.5 ? 2 : best.score >= 0 ? 1 : 0;
-  } else {
-    idx = best.score >= YOGA_THRESHOLDS.strong ? 2 : best.score >= YOGA_THRESHOLDS.moderate ? 1 : 0;
-  }
+  let idx = best.idx;
+  const reasons = best.ps.map((p) => strengthReason(p, graha(p.name)));
+  if (MAHAPURUSHA.has(y.key)) reasons.unshift("Pancha Mahapurusha conditions met (own or exalted sign in a kendra)");
+  if (best.capped) reasons.push(best.capped);
   if (y.status === "cancelled") {
     idx = Math.max(0, idx - 1);
     reasons.push("Cancelled by Bhanga (one level lower)");
   }
-  return yogaRating(YOGA_LEVELS[idx], reasons);
+  return yogaRating(YOGA_LEVELS[idx], reasons, best.ps.map((p) => p.name));
+}
+
+/**
+ * Consistency check before any text is generated: no Strong yoga may contain a
+ * weak planet. Returns problems (empty = consistent); rateYoga prevents them by
+ * construction, so a non-empty result means a bug.
+ */
+export function ratingContradictions(
+  yogas: { name: string; rating: Rating<YogaLevel>; combinations: { participants: string[] }[] }[],
+  strengths: Map<string, PlanetStrength>,
+): string[] {
+  return yogas.flatMap((y) => {
+    if (y.rating.level !== "Strong") return [];
+    const basis = y.rating.basis ?? [...new Set(y.combinations.flatMap((c) => c.participants))];
+    const weak = basis.filter((n) => !NODES.has(n) && strengths.get(n)?.level === "weak");
+    return weak.length ? [`${y.name} is rated Strong but ${weak.join(", ")} is weak`] : [];
+  });
 }
 
 // ---------- Doshas ----------
@@ -139,7 +116,18 @@ const SEVERITY: Record<string, DoshaLevel> = {
 };
 
 /** Kundlit's severity already accounts for its listed cancellations (checked on fixtures). */
-export function rateManglik(m: Manglik): Rating<DoshaLevel> {
+const MANGLIK_LEVEL: Record<string, DoshaLevel> = { high: "High", medium: "Medium", low: "Low" };
+
+/** Grahavani's Manglik (lib/astro/manglik.ts) gives its own intensity; Kundlit's severity is the fallback. */
+export function rateManglik(m: Manglik | ManglikResult): Rating<DoshaLevel> {
+  if ("grahavani" in m) {
+    const g = m.grahavani;
+    if (!m.manglik) return doshaRating(null, g.intensity === "cancelled" ? [g.steps[g.steps.length - 1]] : []);
+    return doshaRating(MANGLIK_LEVEL[g.intensity] ?? "Medium", [
+      g.steps[g.steps.length - 1],
+      ...g.cancellations.filter((c) => c.applies).map((c) => `${c.text} (tradition-dependent)`),
+    ]);
+  }
   if (!m.manglik) return doshaRating(null, []);
   const level = SEVERITY[m.severity] ?? "Medium";
   return doshaRating(level, [
@@ -155,9 +143,11 @@ export function rateKaalSarp(k: KaalSarp): Rating<DoshaLevel> {
     : doshaRating("Medium", [`${k.full_or_partial === "partial" ? "Partial" : k.full_or_partial}: not every graha on one side`]);
 }
 
-export function rateKemadruma(present: boolean, cancelled: boolean): Rating<DoshaLevel> {
+export function rateKemadruma(present: boolean, cancellations: string[]): Rating<DoshaLevel> {
   if (!present) return doshaRating(null, []);
-  return cancelled ? doshaRating("Low", ["Cancellation listed by Kundlit"]) : doshaRating("Medium", ["Present, no cancellation listed"]);
+  return cancellations.length
+    ? doshaRating("Low", cancellations.map((c) => `Cancelled: ${c}`))
+    : doshaRating("Medium", ["Formed, and none of the classical cancellations apply"]);
 }
 
 export function rateSadeSati(runningPhase: string | null): Rating<DoshaLevel> {

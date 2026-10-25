@@ -8,7 +8,8 @@ import { Attribution, Note, Section, Skeleton, Term } from "@/components/ui";
 import { PersonHeader } from "@/components/kundli";
 import { ManglikDetails } from "@/components/manglik";
 import { manglikStatus } from "@/lib/summaries";
-import { manglikOf } from "@/lib/cache";
+import { completedChartRow } from "@/lib/cache";
+import { computeManglik } from "@/lib/astro/manglik";
 import { ReadingPanel } from "@/components/ReadingPanel";
 import { FollowupBox } from "@/components/FollowupBox";
 import { ItemActions } from "@/components/ItemActions";
@@ -27,10 +28,10 @@ export default function ManglikPage({ params }: PageProps<"/manglik/[slug]">) {
 async function ManglikView({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const profile = await loadProfile(slug);
-  const row = profile?.birthChart.manglik;
-  if (!profile || !row) notFound();
-  const m = manglikOf(row);
-  const [session, editable] = await Promise.all([auth(), canModify(profile.userId)]);
+  if (!profile) notFound();
+  // Grahavani's own Manglik, computed from the chart (refreshed once if it is missing newer fields).
+  const [{ chart }, session, editable] = await Promise.all([completedChartRow(profile.birthChart), auth(), canModify(profile.userId)]);
+  const m = computeManglik(chart);
 
   return (
     <div>
@@ -51,7 +52,7 @@ async function ManglikView({ params }: { params: Promise<{ slug: string }> }) {
       </section>
       <Section title="Details">
         <ManglikDetails m={m} />
-        <Attribution data={row.attribution as AttributionData} />
+        <Attribution data={profile.birthChart.attribution as AttributionData} />
       </Section>
       <Note title="Please note">
         Manglik Dosha is one traditional factor. It is not a prediction about anyone&apos;s life or marriage.

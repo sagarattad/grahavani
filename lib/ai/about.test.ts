@@ -17,19 +17,19 @@ const good = () => ({
 
 describe("About items", () => {
   it("lists exactly the present Yogas and Doshas", () => {
-    expect(keys.sort()).toEqual(["dhaiya", "manglik", "nabhasa.pasha", "yoga.dhana", "yoga.raja", "yoga.ruchaka", "yoga.vasi"].sort());
+    // Kemadruma is formed but cancelled (Grahavani's rule), so it counts as present.
+    expect(keys.sort()).toEqual(["dhaiya", "kemadruma", "manglik", "nabhasa.pasha", "yoga.adhi", "yoga.dhana", "yoga.raja", "yoga.ruchaka", "yoga.vasi"].sort());
   });
 
   it("skips absent doshas and absent checklist yogas", () => {
     expect(keys).not.toContain("kaalSarp");
-    expect(keys).not.toContain("kemadruma");
     expect(keys).not.toContain("sadeSati");
     expect(keys).not.toContain("yoga.bhadra");
   });
 
   it("keeps cancellations separate from details", () => {
     const m = items.find((i) => i.key === "manglik")!;
-    expect(m.cancellations).toEqual(["Mars in own sign (Vrishchika)"]);
+    expect(m.cancellations).toEqual(["Mars in its own or exaltation sign (tradition-dependent)"]);
     expect(m.details.join()).not.toMatch(/Cancellation/);
   });
 
@@ -101,9 +101,9 @@ describe("Gun Milan About items", () => {
 describe("About ratings", () => {
   it("items carry the fixed rating phrase and reasons", () => {
     const ruchaka = items.find((i) => i.key === "yoga.ruchaka")!;
-    expect(ruchaka.rating).toBe("rated Weak");
+    expect(ruchaka.rating).toBe("rated Moderate"); // Mars strong, one level lower for the Bhanga
     expect(ruchaka.rating_reasons.join()).toMatch(/Bhanga/);
-    expect(items.find((i) => i.key === "manglik")!.rating).toBe("intensity: Low");
+    expect(items.find((i) => i.key === "manglik")!.rating).toBe("intensity: Medium"); // 7th from Lagna, 4th from Moon, own sign −1
     expect(items.find((i) => i.key === "nabhasa.pasha")!.rating).toBe("not rated");
   });
 

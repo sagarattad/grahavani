@@ -2,7 +2,7 @@
 // reading is included only if one was already generated for these facts —
 // a download never calls OpenAI.
 import { db } from "@/lib/db";
-import { ensureFreshDasha, loadDoshaData, manglikOf } from "@/lib/cache";
+import { ensureFreshDasha, loadDoshaData } from "@/lib/cache";
 import { buildDoshas } from "@/lib/doshas";
 import { factsFor, loadMatch, loadProfile } from "@/lib/targets";
 import { readingCacheKey } from "@/lib/ai/reading";
@@ -65,16 +65,15 @@ async function buildInput(kind: (typeof KINDS)[number], slug: string): Promise<{
   const p = await loadProfile(slug);
   if (!p) return null;
   if (kind === "manglik") {
-    const mg = p.birthChart.manglik;
-    if (!mg) return null;
+    const data = await loadDoshaData(p.birthChart); // Grahavani's computed Manglik
     return {
       names: [p.name],
       input: {
         kind,
         data: {
           person: personOf(p),
-          manglik: manglikOf(mg),
-          attribution: mg.attribution as Attribution,
+          manglik: data.manglik,
+          attribution: p.birthChart.attribution as Attribution,
           reading: await cachedReading("manglik", slug),
         },
       },

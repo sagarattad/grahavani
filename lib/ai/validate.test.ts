@@ -33,10 +33,22 @@ describe("facts", () => {
     expect(JSON.stringify(followup.facts)).not.toMatch(/remed|Hanuman|lentils|peepal/i);
   });
 
-  it("reading facts exclude transit dates and timing candidates; follow-up facts include them", () => {
-    expect(JSON.stringify(facts)).not.toMatch(/Sade Sati|Dhaiya|timing_candidates/);
+  it("reading facts carry Saturn transit overlaps but not the transit dosha cards or timing candidates", () => {
+    expect(facts).not.toHaveProperty("timing_candidates");
+    expect((facts.doshas as { dosha: string }[]).map((d) => d.dosha)).not.toContain("Sade Sati");
+    expect(facts.transits).toHaveProperty("saturn_overlaps");
     expect(followup.facts).toHaveProperty("timing_candidates");
     expect(JSON.stringify(followup.facts)).toMatch(/Sade Sati/);
+  });
+
+  it("carry Grahavani's factors: dignity, strength, functional nature, D9 / D10, Dasha lords, not computed", () => {
+    expect(facts.functional_nature.yogakarakas).toEqual(["Shani"]); // Vrishabha Lagna
+    expect(facts.marriage).toHaveProperty("darakaraka");
+    expect(facts.marriage.upapada_lagna).toHaveProperty("rashi");
+    expect(facts).toHaveProperty("career_d10");
+    expect(facts.dasha_lords.mahadasha.reading.length).toBeGreaterThan(0);
+    expect(facts.not_computed).toContain("Sarvashtakavarga");
+    expect(JSON.stringify(facts.grahas)).toMatch(/"strength":"(strong|moderate|weak)"/);
   });
 
   it("groups yogas in facts (one Raj Yoga entry with 2 combinations)", () => {
@@ -160,14 +172,14 @@ describe("Manglik validation", () => {
 });
 
 describe("ratings in fixed phrases", () => {
-  // Raipur: Raj Yoga and Dhana Yoga rated Moderate, Manglik Dosha intensity: Low.
+  // Raipur: Raj Yoga rated Moderate, Dhana Yoga Weak, Manglik Dosha intensity: Medium.
   const check = (text: string) => validateReading({ yogas: text }, kundliCtx);
 
   it("facts carry the fixed rating phrase", () => {
     const raj = (facts.yogas_present as { yoga: string; rating: string }[]).find((y) => y.yoga === "Raj Yoga")!;
     expect(raj.rating).toBe("rated Moderate");
-    expect(JSON.stringify(facts.doshas)).toMatch(/"rating":"intensity: Low"/);
-    expect(JSON.stringify(facts.grahas)).toMatch(/"avastha":"Bala"/);
+    expect(JSON.stringify(facts.doshas)).toMatch(/"rating":"intensity: Medium"/);
+    expect(JSON.stringify(facts.grahas)).toMatch(/"avastha":"Bala \(minor factor\)"/);
   });
 
   it("a yoga's rating must match FACTS", () => {
@@ -176,8 +188,8 @@ describe("ratings in fixed phrases", () => {
   });
 
   it("a dosha's intensity must match FACTS", () => {
-    expect(check("Manglik Dosha, intensity: Low, with one cancellation.")).toEqual([]);
-    expect(check("Manglik Dosha, intensity: High.").join()).toMatch(/computed intensity: Low/);
+    expect(check("Manglik Dosha, intensity: Medium, with one cancellation.")).toEqual([]);
+    expect(check("Manglik Dosha, intensity: High.").join()).toMatch(/computed intensity: Medium/);
   });
 
   it("other uses of strong, weak, high or low are ignored", () => {
@@ -195,16 +207,16 @@ describe("ratings in fixed phrases", () => {
   });
 
   it("several items in one sentence: each phrase follows its own item's name", () => {
-    expect(check("Raj Yoga is rated Moderate, while Ruchaka is rated Weak.")).toEqual([]);
+    expect(check("Raj Yoga is rated Moderate, while Vasi is rated Weak.")).toEqual([]);
     expect(check("Raj Yoga is rated Moderate, while Ruchaka is rated Strong.").join()).toMatch(/Ruchaka: text says "rated Strong"/);
-    expect(check("Manglik Dosha has intensity: Low and Raj Yoga is rated Moderate.")).toEqual([]);
+    expect(check("Manglik Dosha has intensity: Medium and Raj Yoga is rated Moderate.")).toEqual([]);
   });
 
   it("a rating can refer back to the item named just before (the live failures)", () => {
-    expect(check("Manglik Dosha is present. Its intensity: Low.")).toEqual([]);
-    expect(check("Manglik Dosha is mild; intensity: Low.")).toEqual([]);
+    expect(check("Manglik Dosha is present. Its intensity: Medium.")).toEqual([]);
+    expect(check("Manglik Dosha is present; intensity: Medium.")).toEqual([]);
     expect(check("Raj Yoga links the 1st and 5th lords. It is rated Moderate because of combustion.")).toEqual([]);
-    expect(check("Manglik Dosha is present. Its intensity: High.").join()).toMatch(/computed intensity: Low/);
+    expect(check("Manglik Dosha is present. Its intensity: High.").join()).toMatch(/computed intensity: Medium/);
   });
 
   it("hyphen and space spellings are the same name", () => {
@@ -224,5 +236,26 @@ describe("ratings in fixed phrases", () => {
       out_of_scope: false,
     };
     expect(validateReading(answer, followup.ctx)).toEqual([]);
+  });
+});
+
+describe("evidence rules (Oct 2026 review)", () => {
+  const check = (text: string) => validateReading({ career: text }, kundliCtx);
+
+  it("rejects absolute negative verdicts", () => {
+    expect(check("Venus gives very little result.").join()).toMatch(/absolute negative/);
+    expect(check("There will be marked difficulties in partnerships.").join()).toMatch(/absolute negative/);
+    expect(check("Marriage will never be easy.").join()).toMatch(/absolute negative/);
+    expect(check("Venus is weak, but the debility is cancelled.")).toEqual([]);
+  });
+
+  it("accepts D10 placements when the sentence names the D10", () => {
+    const sun = raipur.grahas.find((g) => g.name === "Sun")!;
+    const d10 = { 1: "Mesha", 2: "Vrishabha", 3: "Mithuna", 4: "Karka", 5: "Simha", 6: "Kanya", 7: "Tula", 8: "Vrishchika", 9: "Dhanu", 10: "Makara", 11: "Kumbha", 12: "Meena" }[sun.dashamsha!.sign_num];
+    expect(check(`In the D10, Surya is in ${d10}.`)).toEqual([]);
+  });
+
+  it("allows naming partial Shadbala components", () => {
+    expect(check("The partial Shadbala components give Surya a strong Dig bala.")).toEqual([]);
   });
 });

@@ -4,6 +4,9 @@ import { DOSHA_YOGA_IDS, YOGA_CHECKLIST, humanize, yogaCategory } from "./glossa
 import { activationWindows, type Window } from "./dasha";
 import type { Chart, Yoga } from "./kundlit-schemas";
 import { rateYoga, type Rating, type YogaLevel } from "./strength";
+import { chartStrengths } from "./astro/planet-strength";
+import { adhi, dhana, neechaBhanga, viparita } from "./astro/rules";
+import { functionalNature } from "./astro/functional";
 
 export type YogaItem = {
   key: string;
@@ -20,6 +23,8 @@ export type YogaItem = {
 };
 
 const BHANGA = "yoga.bhanga.";
+// Detected by Grahavani's own rules (lib/astro/rules.ts); Kundlit's versions are dropped.
+const REPLACED = new Set(["yoga.dhana", "yoga.neechabhanga", "yoga.kemadruma"]);
 
 /**
  * Kundlit's rule id. Charts cached before rule ids were stored only have a
@@ -49,6 +54,7 @@ export function groupYogas(chart: Chart, asOf: string): YogaItem[] {
   for (const y of chart.yogas) {
     const key = keyOf(y);
     if (DOSHA_YOGA_IDS.has(key) || key.startsWith(`${BHANGA}kemadruma`)) continue; // shown under Doshas
+    if (REPLACED.has(key) || REPLACED.has(`yoga.${key.slice(BHANGA.length)}`)) continue; // Grahavani's rules below
     if (key.startsWith(BHANGA)) {
       bhangas.push(y);
       continue;
@@ -81,10 +87,18 @@ export function groupYogas(chart: Chart, asOf: string): YogaItem[] {
     target.cancellations.push(cleanClaim(b.claim).replace(/^.*?is cancelled because:\s*/i, ""));
   }
 
+  const own = grahavaniYogas(chart);
+  for (const g of own) groups.set(g.item.key, g.item);
+
   const { timeline } = chart.vimshottari;
+  const strengths = chartStrengths(chart);
   for (const g of groups.values()) {
     if (!g.nabhasa) g.windows = activationWindows(g.participants, timeline, asOf, 3);
-    g.rating = rateYoga(g, chart);
+    const special = own.find((o) => o.item === g);
+    g.rating = special?.rating ?? rateYoga(g, chart, strengths);
+    if (special?.capModerate && g.rating.level === "Strong") {
+      g.rating = { ...g.rating, level: "Moderate", label: "Rated Moderate", reasons: [...g.rating.reasons, special.capModerate] };
+    }
   }
 
   const order = new Map(YOGA_CHECKLIST.map((c, i) => [c.ruleId, i]));
@@ -101,4 +115,83 @@ export function yogaChecklist(chart: Chart, asOf: string) {
     meaning: c.label.meaning,
   }));
   return { present, absent };
+}
+
+type OwnYoga = { item: YogaItem; rating?: Rating<YogaLevel>; capModerate?: string };
+
+const item = (key: string, category: string, combinations: { claim: string; participants: string[] }[]): YogaItem => {
+  const meta = YOGA_CHECKLIST.find((c) => c.ruleId === key);
+  return {
+    key,
+    name: meta?.label.en ?? key,
+    meaning: meta?.label.meaning,
+    category,
+    status: "present",
+    combinations,
+    cancellations: [],
+    participants: [...new Set(combinations.flatMap((c) => c.participants))],
+    nabhasa: false,
+    windows: [],
+    rating: { level: null, label: "Not rated", reasons: [] },
+  };
+};
+
+/**
+ * Grahavani's own yogas: Neecha Bhanga and its Raja Yoga (checked from Lagna and
+ * Moon), Viparita Raja Yogas, Dhana (explicit lords and links) and Adhi.
+ */
+export function grahavaniYogas(chart: Chart): OwnYoga[] {
+  const out: OwnYoga[] = [];
+  const nb = neechaBhanga(chart).filter((n) => n.state === "formed");
+  if (nb.length) {
+    out.push({
+      item: item(
+        "yoga.neecha_bhanga",
+        "Debility cancelled",
+        nb.map((n) => ({ claim: `${n.planet}'s debility is cancelled: ${n.rules.join("; ")}`, participants: [n.planet, ...n.cancelling] })),
+      ),
+      rating: { level: null, label: "Not rated", reasons: ["Cancels a debility; its strength shows in Neechabhanga Raj Yoga and the planet's own strength"] },
+    });
+    const raja = nb.filter((n) => n.raja.state !== "not formed");
+    const full = raja.filter((n) => n.raja.state === "full");
+    const it = item(
+      "yoga.neechabhanga",
+      "Raj yoga",
+      raja.map((n) => ({ claim: `${n.planet}: ${n.raja.state === "full" ? "formed" : "partial"} (${n.raja.why})`, participants: [n.planet, ...n.cancelling] })),
+    );
+    if (raja.length) {
+      out.push(
+        full.length
+          ? { item: { ...it, combinations: it.combinations.filter((c) => full.some((n) => n.planet === c.participants[0])) } }
+          : { item: it, rating: { level: "Weak", label: "Rated Weak", reasons: raja.map((n) => `Partial for ${n.planet}: ${n.raja.why}`), basis: raja.map((n) => n.planet) } },
+      );
+    }
+  }
+  for (const v of viparita(chart).filter((x) => x.formed)) {
+    out.push({ item: item(v.key, "Viparita Raja Yoga", [{ claim: `${v.lord}, lord of the ${v.lordOf}th, is in the ${v.house}th${v.house === v.lordOf ? " (own sign)" : ""}`, participants: [v.lord] }]) });
+  }
+  const links = dhana(chart);
+  if (links.length) out.push({ item: item("yoga.dhana", "Dhana yoga", links.map((l) => ({ claim: l.how, participants: [l.a, l.b] }))) });
+  const a = adhi(chart);
+  if (a.state !== "not formed") {
+    const claim = `${a.state === "full" ? "Full" : "Partial"}: ${a.planets.map((p) => `${p.name} ${p.from}th from the Moon`).join(", ")}`;
+    const it = item("yoga.adhi", "Chandra yoga", [{ claim, participants: a.planets.map((p) => p.name) }]);
+    if (a.planets.length === 1) {
+      out.push({ item: it, rating: { level: "Weak", label: "Rated Weak", reasons: [`Partial Adhi Yoga with one benefic (${a.planets[0].name}): a mild effect only`], basis: [a.planets[0].name] } });
+    } else out.push({ item: it, capModerate: a.state === "partial" ? "Partial Adhi Yoga (two of the three benefics), so at most Moderate" : undefined });
+  }
+  // The yogakaraka in a kendra from the Lagna: a notable source of rise in its own right.
+  const fnat = functionalNature(chart.lagna.sign_num);
+  for (const yk of fnat.yogakarakas) {
+    const g = chart.grahas.find((x) => x.name === yk)!;
+    if ([1, 4, 7, 10].includes(g.house)) {
+      const withNode = chart.grahas.filter((x) => (x.name === "Rahu" || x.name === "Ketu") && x.sign_num === g.sign_num).map((x) => x.name);
+      out.push({
+        item: item("yoga.yogakaraka_kendra", "Raj yoga", [
+          { claim: `${yk} rules the ${fnat.roles[yk].houses.join(" and ")} and sits in Bhava ${g.house}, a kendra${withNode.length ? `, with ${withNode.join(" and ")}` : ""}`, participants: [yk] },
+        ]),
+      });
+    }
+  }
+  return out;
 }

@@ -46,9 +46,9 @@ describe("yogaChecklist", () => {
     expect(absent.some((a) => present.some((p) => p.key === a.key))).toBe(false);
   });
 
-  it("every checklist yoga has appeared in at least one real Kundlit response", () => {
+  it("every Kundlit-sourced checklist yoga has appeared in at least one real Kundlit response", () => {
     const seen = new Set(fx.flatMap((f) => (rawFixture(f.file).chart.yogas as { rule_id: string }[]).map((y) => y.rule_id)));
-    for (const c of YOGA_CHECKLIST) expect(seen, c.ruleId).toContain(c.ruleId);
+    for (const c of YOGA_CHECKLIST.filter((x) => !x.grahavani)) expect(seen, c.ruleId).toContain(c.ruleId);
   });
 });
 

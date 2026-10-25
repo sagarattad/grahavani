@@ -5,7 +5,6 @@ import { d1Houses, d9Houses } from "../chart/northIndian";
 import {
   KOOTS,
   cancellationLabel,
-  dignity,
   graha,
   grahaWithMeaning,
   kootLabel,
@@ -22,6 +21,14 @@ import { windowText } from "../periods";
 import type { DoshaCard } from "../doshas";
 import { ABOUT_DOSHA_STATUSES, type AboutTexts } from "../ai/about";
 import { PARTIAL_POINTS_NOTE, RATING_NOTE, rateKootDosha, type Rating } from "../strength";
+import { chartStrengths } from "../astro/planet-strength";
+import { dignityText } from "../astro/relations";
+import { functionalNature } from "../astro/functional";
+import { ownHouseLords } from "../astro/rules";
+import { atmakaraka, marriageFactors } from "../astro/marriage";
+import { birthTimeCheck, careerD10, transitOverlaps } from "../astro/timing-checks";
+import { readDashaLord } from "../astro/dasha-lords";
+import { groupYogas } from "../yogas";
 import type { Attribution, Chart, DashaCurrent, Koot, Manglik, Milan } from "../kundlit-schemas";
 import { PdfChart } from "./chart";
 import { C, KeyValues, NoteBox, PdfDoc, PersonLine, ReadingSection, Section, Table, latin, s, type PdfPerson, type Reading } from "./layout";
@@ -47,7 +54,17 @@ export function KundliPdf({ person, chart, dasha, doshas, about, attribution, re
   const boundary = [
     nearSignBoundary(chart.lagna.deg_in_sign) && `Lagna is at ${dms(chart.lagna.deg_in_sign)} in ${rashi(chart.lagna.sign_num)}, close to a Rashi boundary.`,
     nearSignBoundary(moon.deg_in_sign) && `Chandra (Moon) is at ${dms(moon.deg_in_sign)} in ${rashi(moon.sign_num)}, close to a Rashi boundary.`,
+    ...(birthTimeCheck(chart, rashi)?.notes ?? []),
   ].filter(Boolean) as string[];
+  const strengths = chartStrengths(chart);
+  const fn = functionalNature(chart.lagna.sign_num);
+  const own = ownHouseLords(chart);
+  const yogas = groupYogas(chart, dasha.as_of);
+  const lords = [
+    ["Mahadasha lord", readDashaLord(chart, dasha.mahadasha.lord, yogas, strengths)],
+    ["Antardasha lord", readDashaLord(chart, dasha.antardasha.lord, yogas, strengths)],
+  ] as const;
+  const transits = transitOverlaps(chart, dasha.as_of);
 
   return (
     <PdfDoc
@@ -78,30 +95,41 @@ export function KundliPdf({ person, chart, dasha, doshas, about, attribution, re
       <Section title="Graha (planet) positions">
         <Table
           cols={[
-            ["Graha", 2.2],
-            ["Rashi (sign)", 1.4],
-            ["Degree", 1],
-            ["Nakshatra-Pada", 2],
-            ["Bhava (house)", 1.1, "center"],
-            ["R", 0.4, "center"],
-            ["C", 0.4, "center"],
-            ["Avastha", 1, "center"],
+            ["Graha", 2.3],
+            ["Rashi (sign)", 1.2],
+            ["Degree", 0.9],
+            ["Nakshatra-Pada", 1.7],
+            ["Bhava", 0.7, "center"],
+            ["R", 0.3, "center"],
+            ["C", 0.3, "center"],
+            ["D9", 1.5],
+            ["Strength", 0.9, "center"],
+            ["Avastha", 0.9, "center"],
           ]}
           rows={[
-            ["Lagna", rashi(chart.lagna.sign_num), dms(chart.lagna.deg_in_sign), `${nakshatra(chart.lagna.nakshatra_num)}-${chart.lagna.pada}`, "1", "", "", ""],
-            ...chart.grahas.map((g) => [
-              grahaWithMeaning(g.name) + (g.dignity !== "neutral" ? ` · ${dignity(g.dignity)}` : ""),
-              rashi(g.sign_num),
-              dms(g.deg_in_sign),
-              `${nakshatra(g.nakshatra_num)}-${g.pada}`,
-              String(g.house),
-              g.retrograde ? "R" : "",
-              g.combust ? "C" : "",
-              g.avastha ?? "-",
-            ]),
+            ["Lagna", rashi(chart.lagna.sign_num), dms(chart.lagna.deg_in_sign), `${nakshatra(chart.lagna.nakshatra_num)}-${chart.lagna.pada}`, "1", "", "", rashi(chart.navamsha_lagna.sign_num), "", ""],
+            ...chart.grahas.map((g) => {
+              const st = strengths.get(g.name)!;
+              return [
+                grahaWithMeaning(g.name) + (st.dignity ? ` · ${st.dignity.label}` : ""),
+                rashi(g.sign_num),
+                dms(g.deg_in_sign),
+                `${nakshatra(g.nakshatra_num)}-${g.pada}`,
+                String(g.house),
+                g.retrograde ? "R" : "",
+                g.combust ? "C" : "",
+                `${rashi(g.navamsha.sign_num)}${st.d9Dignity ? ` · ${st.d9Dignity.label}` : ""}${g.vargottama ? " · Vargottama" : ""}`,
+                st.level,
+                g.avastha ?? "-",
+              ];
+            }),
           ]}
         />
-        <Text style={[s.small, { marginTop: 4 }]}>R = Vakri (retrograde). C = Asta (combust). Rahu and Ketu always move in reverse. Avastha = Baladi avastha (age state).</Text>
+        <Text style={[s.small, { marginTop: 4 }]}>
+          R = Vakri (retrograde). C = Asta (combust). Rahu and Ketu always move in reverse. Dignity after each name is the compound (natural +
+          temporary) relation to the sign lord. Strength: Grahavani&apos;s composite (dignity, house, D9, combustion, retrogression, the Moon&apos;s paksha;
+          Baladi avastha minor). Not computed: full Shadbala, Sarvashtakavarga.
+        </Text>
       </Section>
 
       <Section title="Lagna details" keepTogether>
@@ -113,9 +141,20 @@ export function KundliPdf({ person, chart, dasha, doshas, about, attribution, re
             ["Rashi (Moon sign)", rashi(moon.sign_num)],
             ["Janma Nakshatra", `${nakshatra(moon.nakshatra_num)}, Pada ${moon.pada}`],
             ["Navamsa Lagna", rashi(chart.navamsha_lagna.sign_num)],
+            ["Yogakaraka", fn.yogakarakas.length ? fn.yogakarakas.map((p) => `${graha(p)} (rules ${fn.roles[p].houses.join(" and ")})`).join(", ") : "none for this Lagna"],
+            ["Functional benefics", fn.benefics.map(graha).join(", ") || "none"],
+            ["Functional malefics", fn.malefics.map(graha).join(", ") || "none"],
+            ["Marakas (2nd and 7th lords)", fn.marakas.map(graha).join(", ")],
+            ["Badhaka", graha(fn.badhaka)],
+            ["Atmakaraka (7-karaka scheme)", graha(atmakaraka(chart))],
+            ...(own.length ? ([["Own-house lords", own.map((o) => o.text).join("; ")]] as [string, string][]) : []),
           ]}
         />
       </Section>
+
+      <PdfYogas chart={chart} asOf={dasha.as_of} about={about} />
+      <PdfDoshas title="Doshas" cards={doshas} about={about} />
+      <PdfMarriageCareer chart={chart} />
 
       <Section title="Vimshottari Dasha (120-year period system)">
         <Text style={s.h3}>Running now</Text>
@@ -126,6 +165,25 @@ export function KundliPdf({ person, chart, dasha, doshas, about, attribution, re
             ["Pratyantar Dasha", `${grahaWithMeaning(dasha.pratyantardasha.lord)} · ends ${dateOnly(dasha.pratyantardasha.end)}`],
           ]}
         />
+        <Text style={s.h3}>How the running period lords read</Text>
+        {lords.map(([label, r]) => (
+          <Text key={label} style={{ marginBottom: 2 }}>
+            <Text style={s.bold}>
+              {label}: {grahaWithMeaning(r.lord)} ({r.strength.level}).{" "}
+            </Text>
+            {latin(r.summary.join("; "))}.
+          </Text>
+        ))}
+        {transits.overlaps.length > 0 && (
+          <>
+            <Text style={s.h3}>Saturn transits overlapping these periods</Text>
+            {transits.overlaps.map((o) => (
+              <Text key={o.transit + o.period} style={s.small}>
+                {o.transit}, {dateOnly(o.from)} – {dateOnly(o.to)} · overlaps {o.period.split("–").map(graha).join("–")} ({dateOnly(o.periodFrom)} – {dateOnly(o.periodTo)})
+              </Text>
+            ))}
+          </>
+        )}
         <Text style={[s.small, { marginTop: 3 }]}>
           Dasha balance at birth: {graha(chart.vimshottari.birth.mahadasha.lord)} Mahadasha, {ymd(chart.vimshottari.birth.mahadasha.balance_ymd)}. As of{" "}
           {dateOnly(dasha.as_of)}.
@@ -146,9 +204,6 @@ export function KundliPdf({ person, chart, dasha, doshas, about, attribution, re
           );
         })}
       </Section>
-
-      <PdfYogas chart={chart} asOf={dasha.as_of} about={about} />
-      <PdfDoshas title="Doshas" cards={doshas} about={about} />
 
       <ReadingSection kind="kundli" reading={reading} />
     </PdfDoc>
@@ -367,7 +422,7 @@ function PdfYogas({ chart, asOf, about }: { chart: Chart; asOf: string; about?: 
       {present.length > 0 && !about && <AboutHint />}
       {absent.length > 0 && (
         <Text style={[s.muted, { marginTop: 4 }]}>
-          <Text style={s.bold}>Not present: </Text>
+          <Text style={s.bold}>Not formed: </Text>
           {absent.map((a) => a.name).join(" · ")}
         </Text>
       )}
@@ -426,6 +481,41 @@ function RatingText({ rating, label }: { rating: Rating<string>; label: string }
       <Text style={s.bold}>{label ? `${label}${rating.level ?? "Not rated"}` : rating.label}</Text>
       {why ? `. Why: ${why}` : ""}
     </Text>
+  );
+}
+
+/** Marriage (D1 and Navamsa, Darakaraka, Upapada) and career (D10) factors. */
+function PdfMarriageCareer({ chart }: { chart: Chart }) {
+  const m = marriageFactors(chart);
+  const d10 = careerD10(chart);
+  const bt = birthTimeCheck(chart, rashi);
+  return (
+    <Section title="Marriage and career factors (D9 / D10)">
+      {bt?.warn && <Text style={[s.small, { color: C.warn }]}>{bt.notes.join(" ")} D9-based statements are sensitive to the exact birth time.</Text>}
+      <KeyValues
+        rows={[
+          ["D1 7th lord", `${grahaWithMeaning(m.d1.seventhLord)} in Bhava ${m.d1.lordHouse} (${m.d1.lordStrength})`],
+          ["Venus (D1)", `${m.d1.venusDignity} (${m.d1.venusStrength})`],
+          ["D9 Lagna", rashi(m.d9.lagnaSign)],
+          ["D9 7th and its lord", `${rashi(m.d9.seventhSign)}, lord ${graha(m.d9.seventhLord)} in D9 ${rashi(m.d9.lordD9Sign)}: ${dignityText(m.d9.lordD9Dignity)}${m.d9.lordVargottama ? ", Vargottama" : ""}`],
+          ["Venus (D9)", `${rashi(m.d9.venusD9Sign)}: ${dignityText(m.d9.venusD9Dignity)}`],
+          ["Darakaraka", `${grahaWithMeaning(m.darakaraka.planet)} (${m.darakaraka.scheme})`],
+          ["Upapada Lagna", `${rashi(m.upapada.sign)} (lord ${graha(m.upapada.lord)})`],
+          ...(d10
+            ? ([
+                ["D10 Lagna", rashi(d10.lagnaSign)],
+                ["D10 10th and its lord", `${rashi(d10.tenthSign)}, lord ${graha(d10.tenthLord)}`],
+                ["Key planets in D10", d10.planets.map((p) => `${graha(p.name)} ${rashi(p.sign)} (${p.dignity})`).join("; ")],
+              ] as [string, string][])
+            : []),
+        ]}
+      />
+      {m.comparison.map((c) => (
+        <Text key={c} style={s.small}>
+          • {c}
+        </Text>
+      ))}
+    </Section>
   );
 }
 

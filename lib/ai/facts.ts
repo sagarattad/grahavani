@@ -1,7 +1,7 @@
 // Builds the FACTS sent to OpenAI from cached Kundlit results (plus the
 // Antardasha split in lib/dasha.ts and timing candidates in lib/timing.ts).
 // Never includes names, places, birth date or birth time.
-import { GRAHAS, KOOTS, cancellationLabel, dignity, graha, kootLabel, rashi, nakshatra, severity, verdict } from "../glossary";
+import { GRAHAS, KOOTS, cancellationLabel, graha, kootLabel, rashi, nakshatra, severity, verdict } from "../glossary";
 import type { Chart, DashaCurrent, KaalSarp, Manglik, Milan } from "../kundlit-schemas";
 import { dateOnly } from "../format";
 import { antardashas, contains, type Window } from "../dasha";
@@ -9,11 +9,20 @@ import { yogaChecklist } from "../yogas";
 import { buildDoshas, kaalSarpCard, kemadrumaCard, manglikCard, type DoshaCard } from "../doshas";
 import { timingCandidates } from "../timing";
 import { doshaState, sortKoots } from "../summaries";
-import { rateKootDosha, rateManglik, ratingPhrase, type Rating } from "../strength";
+import { RATING_NOTE, rateKootDosha, rateManglik, ratingPhrase, type Rating } from "../strength";
+import { chartStrengths } from "../astro/planet-strength";
+import { functionalNature } from "../astro/functional";
+import { dignityText } from "../astro/relations";
+import { ownHouseLords } from "../astro/rules";
+import { marriageFactors } from "../astro/marriage";
+import { birthTimeCheck, careerD10, transitOverlaps } from "../astro/timing-checks";
+import { readDashaLord, type DashaLordReading } from "../astro/dasha-lords";
+import { dasamsaSign } from "../astro/varga";
+import type { ManglikResult } from "../astro/manglik";
 
 /** What the validator is allowed to see mentioned in the AI text. */
 export type ValidationContext = {
-  placements: { graha: string; rashi: string; bhava?: number; chart: "d1" | "d9" }[];
+  placements: { graha: string; rashi: string; bhava?: number; chart: "d1" | "d9" | "d10" }[];
   koots?: { api: string; earned: number; max: number }[];
   total?: number;
   dasha?: { mahadashaLords: string[]; antardashaLords: string[]; pratyantardasha: string };
@@ -50,6 +59,7 @@ function placementsOf(chart: Chart): ValidationContext["placements"] {
   return chart.grahas.flatMap((x) => [
     { graha: x.name, rashi: rashi(x.sign_num), bhava: x.house, chart: "d1" as const },
     { graha: x.name, rashi: rashi(x.navamsha.sign_num), chart: "d9" as const },
+    { graha: x.name, rashi: rashi(x.dashamsha?.sign_num ?? dasamsaSign(x.sign_num, x.deg_in_sign)), chart: "d10" as const },
   ]);
 }
 
@@ -89,9 +99,10 @@ type KundliExtras = { manglik: Manglik | null; kaalSarp: KaalSarp | null; birthD
 
 /**
  * Facts for the full Kundli reading (cached by facts hash) and, with
- * `followup`, for follow-up questions (not cached). Transit-based dates
- * (Sade Sati, Dhaiya) and timing candidates are follow-up only, so a yearly
- * transit refresh never changes the reading's hash.
+ * `followup`, for follow-up questions (not cached). The Sade Sati / Dhaiya
+ * cards and timing candidates are follow-up only; the reading gets the Saturn
+ * transit overlaps with its Dasha periods (so a yearly transit refresh does
+ * regenerate it once).
  */
 export function kundliFacts(chart: Chart, dasha: DashaCurrent, extras: KundliExtras, followup = false) {
   const asOf = dasha.as_of; // stable until the Dasha refreshes, keeps the hash stable
@@ -100,10 +111,23 @@ export function kundliFacts(chart: Chart, dasha: DashaCurrent, extras: KundliExt
   const mdIndex = Math.max(timeline.findIndex((p) => contains(p, now)), 0);
   const { present, absent } = yogaChecklist(chart, asOf);
   const adTable = timeline.slice(mdIndex, mdIndex + 3).flatMap((md) => antardashas(md, timeline));
+  const strengths = chartStrengths(chart);
+  const fn = functionalNature(chart.lagna.sign_num);
+  const mf = marriageFactors(chart);
+  const d10 = careerD10(chart);
+  const bt = birthTimeCheck(chart, rashi);
+  const tr = transitOverlaps(chart, asOf);
+  const lordFact = (r: DashaLordReading) => ({
+    lord: g(r.lord),
+    reading: r.summary,
+    strength: r.strength.level,
+    role: r.role,
+    ...(r.node ? { dispositor: g(r.node.dispositor), conjunct: r.node.conjunct.map(graha), with_yogakaraka_in_kendra: r.node.withYogakarakaInKendra } : {}),
+  });
 
   const doshaCards = followup
     ? buildDoshas({ chart, manglik: extras.manglik, kaalSarp: extras.kaalSarp, asOf })
-    : [manglikCard(extras.manglik, chart, asOf), kaalSarpCard(extras.kaalSarp, chart, asOf), kemadrumaCard(chart, asOf)];
+    : [manglikCard(chart, asOf), kaalSarpCard(extras.kaalSarp, chart, asOf), kemadrumaCard(chart, asOf)];
 
   const raw = {
     lagna: {
@@ -114,23 +138,79 @@ export function kundliFacts(chart: Chart, dasha: DashaCurrent, extras: KundliExt
       lagna_lord: g(chart.lagna.lord),
     },
     navamsa_lagna: rashi(chart.navamsha_lagna.sign_num),
-    grahas: chart.grahas.map((x) => ({
-      graha: g(x.name),
-      rashi: rashi(x.sign_num),
-      bhava: x.house,
-      nakshatra: nakshatra(x.nakshatra_num),
-      pada: x.pada,
-      retrograde: x.retrograde,
-      combust: x.combust,
-      dignity: dignity(x.dignity),
-      ...(x.avastha ? { avastha: x.avastha } : {}),
-      navamsa_rashi: rashi(x.navamsha.sign_num),
-      vargottama: x.vargottama,
-    })),
+    grahas: chart.grahas.map((x) => {
+      const s = strengths.get(x.name)!;
+      return {
+        graha: g(x.name),
+        rashi: rashi(x.sign_num),
+        bhava: x.house,
+        nakshatra: nakshatra(x.nakshatra_num),
+        pada: x.pada,
+        retrograde: x.retrograde,
+        combust: x.combust,
+        dignity: s.dignity ? dignityText(s.dignity) : "node",
+        navamsa_rashi: rashi(x.navamsha.sign_num),
+        ...(s.d9Dignity ? { navamsa_dignity: dignityText(s.d9Dignity) } : {}),
+        vargottama: x.vargottama,
+        ...(x.avastha ? { avastha: `${x.avastha} (minor factor)` } : {}),
+        strength: s.level,
+        strength_factors: [...s.factors].sort((a, b) => Math.abs(b.points) - Math.abs(a.points)).slice(0, 4).map((f) => f.label),
+        ...(s.shadbala.uccha !== null
+          ? { partial_shadbala_virupas: { uccha: Math.round(s.shadbala.uccha), dig: Math.round(s.shadbala.dig!), ...(s.shadbala.paksha !== null ? { paksha: Math.round(s.shadbala.paksha) } : {}) } }
+          : {}),
+      };
+    }),
     bhava_lords: Object.fromEntries(Object.entries(chart.functional.house_lords).map(([h, l]) => [h, graha(l)])),
-    yogakarakas: chart.functional.yogakarakas.map(graha),
-    functional_benefics: chart.functional.functional_benefics.map(graha),
-    functional_malefics: chart.functional.functional_malefics.map(graha),
+    functional_nature: {
+      yogakarakas: fn.yogakarakas.map(graha),
+      functional_benefics: fn.benefics.map(graha),
+      functional_malefics: fn.malefics.map(graha),
+      marakas: fn.marakas.map(graha),
+      badhaka: graha(fn.badhaka),
+      atmakaraka: g(mf.atmakaraka),
+    },
+    own_house_lords: ownHouseLords(chart).map((x) => x.text),
+    rating_basis: RATING_NOTE,
+    not_computed: ["Sarvashtakavarga", "full Shadbala (only the Uccha, Dig and the Moon's Paksha components)"],
+    marriage: {
+      d1_7th_lord: { graha: g(mf.d1.seventhLord), bhava: mf.d1.lordHouse, strength: mf.d1.lordStrength },
+      venus_d1: { dignity: mf.d1.venusDignity, strength: mf.d1.venusStrength },
+      d9_lagna: rashi(mf.d9.lagnaSign),
+      d9_7th: rashi(mf.d9.seventhSign),
+      d9_7th_lord: { graha: g(mf.d9.seventhLord), d9_rashi: rashi(mf.d9.lordD9Sign), d9_dignity: dignityText(mf.d9.lordD9Dignity), vargottama: mf.d9.lordVargottama },
+      venus_d9: { rashi: rashi(mf.d9.venusD9Sign), dignity: dignityText(mf.d9.venusD9Dignity) },
+      darakaraka: { graha: g(mf.darakaraka.planet), scheme: mf.darakaraka.scheme, eight_karaka_scheme: g(mf.darakaraka.eightKaraka) },
+      upapada_lagna: { rashi: rashi(mf.upapada.sign), lord: g(mf.upapada.lord) },
+      d1_vs_d9: mf.comparison,
+    },
+    ...(d10
+      ? {
+          career_d10: {
+            d10_lagna: rashi(d10.lagnaSign),
+            d10_10th: rashi(d10.tenthSign),
+            d10_10th_lord: g(d10.tenthLord),
+            planets_in_d10: d10.planets.map((p) => ({ graha: g(p.name), d10_rashi: rashi(p.sign), dignity: p.dignity })),
+          },
+        }
+      : {}),
+    ...(bt
+      ? {
+          birth_time: {
+            minutes_until_d1_lagna_changes: { earlier: Math.round(bt.d1.earlier), later: Math.round(bt.d1.later) },
+            minutes_until_d9_lagna_changes: { earlier: Math.round(bt.d9.earlier), later: Math.round(bt.d9.later) },
+            warning: bt.warn,
+            notes: bt.notes,
+          },
+        }
+      : {}),
+    dasha_lords: {
+      mahadasha: lordFact(readDashaLord(chart, dasha.mahadasha.lord, present, strengths)),
+      antardasha: lordFact(readDashaLord(chart, dasha.antardasha.lord, present, strengths)),
+    },
+    transits: {
+      saturn_overlaps: tr.overlaps.map((o) => ({ transit: o.transit, from: dateOnly(o.from), to: dateOnly(o.to), overlaps_dasha: `${graha(o.period.split("–")[0])}–${graha(o.period.split("–")[1])}`, dasha_from: dateOnly(o.periodFrom), dasha_to: dateOnly(o.periodTo) })),
+      ...(tr.jupiterNow ? { jupiter_now: { rashi: rashi(tr.jupiterNow.sign), house_from_chandra: tr.jupiterNow.fromMoon } } : {}),
+    },
     yogas_present: present.map((y) => ({
       yoga: y.name,
       category: y.category,
@@ -172,16 +252,22 @@ export function kundliFacts(chart: Chart, dasha: DashaCurrent, extras: KundliExt
   return { facts, ctx };
 }
 
-function manglikPart(m: Manglik | null) {
+function manglikPart(m: Manglik | ManglikResult | null) {
   if (!m) return { status: "not available" };
+  const gv = "grahavani" in m ? m.grahavani : null;
   return {
     manglik: m.manglik,
-    severity: m.manglik ? severity(m.severity) : "None",
+    severity: severity(m.severity),
     ...(m.manglik ? { rating: ratingPhrase(rateManglik(m), "dosha"), rating_reasons: rateManglik(m).reasons } : {}),
-    from_lagna: m.ascendant_check,
-    from_chandra: m.moon_check,
-    from_shukra: m.venus_check,
-    cancellations: m.cancellations,
+    ...(gv
+      ? {
+          house_set: gv.houseSet,
+          mars_from: gv.refs.map((r) => ({ from: r.from, house: r.house, counts: r.north ? "yes (North Indian set)" : r.southOnly ? "South Indian rule only" : "no" })),
+          cancellations_tradition_dependent: gv.cancellations.filter((c) => c.weight > 0).map((c) => ({ rule: c.text, applies: c.applies })),
+          disputed: gv.cancellations.filter((c) => c.note).map((c) => `${c.text}: ${c.note}`),
+          intensity_steps: gv.steps,
+        }
+      : { from_lagna: m.ascendant_check, from_chandra: m.moon_check, from_shukra: m.venus_check, cancellations: m.cancellations }),
   };
 }
 

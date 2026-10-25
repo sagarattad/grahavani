@@ -1,11 +1,12 @@
-// One card per dosha, built from Kundlit data only. Missing data (e.g. a
-// Kaal Sarp call that failed, or a chart saved before transit data was kept)
-// becomes "unavailable" instead of breaking the page.
-import { DOSHAS, SADE_SATI_PHASES, severity } from "./glossary";
+// One card per dosha. Manglik and Kemadruma use Grahavani's own rules
+// (lib/astro); Kaal Sarp, Sade Sati and Dhaiya come from Kundlit. Missing data
+// (e.g. a Kaal Sarp call that failed, or a chart saved before transit data was
+// kept) becomes "unavailable" instead of breaking the page.
+import { DOSHAS, SADE_SATI_PHASES } from "./glossary";
 import { dateOnly } from "./format";
 import { activationWindows, type Window } from "./dasha";
-import { cleanClaim, keyOf } from "./yogas";
-import { MANGLIK_CHECKS } from "./summaries";
+import { computeManglik, INTENSITY_LABEL } from "./astro/manglik";
+import { kemadruma, ord } from "./astro/rules";
 import type { Chart, KaalSarp, Manglik } from "./kundlit-schemas";
 import { rateDhaiya, rateKaalSarp, rateKemadruma, rateManglik, rateSadeSati, type DoshaLevel, type Rating } from "./strength";
 
@@ -49,17 +50,32 @@ const YEAR_MS = 365.25 * 86400_000;
 const coveredUntil = (asOf: string, years: number | null | undefined) => new Date(t(asOf) + (years ?? 10) * YEAR_MS).toISOString();
 const inRange = (start: string, end: string, now: number) => t(start) <= now && now < t(end);
 
-export function manglikCard(m: Manglik | null | undefined, chart: Chart, asOf: string): DoshaCard {
-  if (!m) return unavailable("manglik");
-  const triggered = MANGLIK_CHECKS.filter((c) => m[c.key]).map((c) => c.label);
+/**
+ * Grahavani's own Manglik (lib/astro/manglik.ts), computed from the chart:
+ * Mars from Lagna, Moon and Venus, which house set applies, each cancellation
+ * (applies or not, tradition-dependent) and the intensity reasoning.
+ */
+export function manglikCard(chart: Chart, asOf: string): DoshaCard {
+  const m = computeManglik(chart);
+  const g = m.grahavani;
+  const status = g.intensity === "none" ? "absent" : g.intensity === "cancelled" ? "cancelled" : "present";
   return card("manglik", {
-    status: m.manglik ? "present" : "absent",
-    statusLabel: m.manglik ? `Present — ${severity(m.severity)}` : "Not present",
+    status,
+    statusLabel: status === "absent" ? "Not present" : status === "cancelled" ? "Formed but cancelled" : `Present — ${INTENSITY_LABEL[g.intensity]}`,
     details: [
-      ...(m.manglik ? [`Triggered: ${triggered.join(", ") || "—"}`] : []),
-      ...m.cancellations.map((c) => `Cancellation: ${c}`),
+      ...g.refs.map(
+        (r) => `From ${r.from}: Mars in the ${ord(r.house)} — ${r.north ? "yes (North Indian set 1, 4, 7, 8, 12)" : r.southOnly ? "South Indian rule only (adds the 2nd)" : "no"}`,
+      ),
+      ...(status === "absent"
+        ? []
+        : [
+            ...g.cancellations.filter((c) => c.applies).map((c) => `Cancellation: ${c.text} (tradition-dependent)`),
+            ...g.cancellations.filter((c) => !c.applies && c.weight > 0).map((c) => `Does not apply: ${c.text}`),
+            ...g.cancellations.filter((c) => c.note).map((c) => `Note: ${c.text}: ${c.note}`),
+            `Intensity: ${g.steps.join("; ")}`,
+          ]),
     ],
-    windows: m.manglik ? activationWindows(["Mars"], chart.vimshottari.timeline, asOf, 3) : [],
+    windows: status !== "absent" ? activationWindows(["Mars"], chart.vimshottari.timeline, asOf, 3) : [],
     ranges: [],
     rating: rateManglik(m),
   });
@@ -77,17 +93,17 @@ export function kaalSarpCard(k: KaalSarp | null | undefined, chart: Chart, asOf:
   });
 }
 
+/** Grahavani's Kemadruma (lib/astro/rules.ts): formed, formed but cancelled (with reasons), or not formed. */
 export function kemadrumaCard(chart: Chart, asOf: string): DoshaCard {
-  const found = chart.yogas.filter((y) => keyOf(y) === "yoga.kemadruma");
-  const bhanga = chart.yogas.filter((y) => keyOf(y) === "yoga.bhanga.kemadruma");
-  const status = !found.length ? "absent" : bhanga.length ? "cancelled" : "present";
+  const k = kemadruma(chart);
+  const status = k.state === "not formed" ? "absent" : k.state === "cancelled" ? "cancelled" : "present";
   return card("kemadruma", {
     status,
-    statusLabel: status === "absent" ? "Not present" : status === "cancelled" ? "Present — cancelled" : "Present",
-    details: [...found.map((y) => cleanClaim(y.claim)), ...bhanga.map((y) => `Cancellation: ${cleanClaim(y.claim)}`)],
-    windows: found.length ? activationWindows(["Moon"], chart.vimshottari.timeline, asOf, 3) : [],
+    statusLabel: status === "absent" ? "Not formed" : status === "cancelled" ? "Formed but cancelled" : "Formed",
+    details: status === "absent" ? [`Not formed: ${k.why}`] : [`Formed: ${k.why}`, ...k.cancellations.map((c) => `Cancellation: ${c}`)],
+    windows: status !== "absent" ? activationWindows(["Moon"], chart.vimshottari.timeline, asOf, 3) : [],
     ranges: [],
-    rating: rateKemadruma(found.length > 0, bhanga.length > 0),
+    rating: rateKemadruma(status !== "absent", k.cancellations),
   });
 }
 
@@ -163,7 +179,7 @@ export function buildDoshas(opts: {
 }): DoshaCard[] {
   const { chart, asOf } = opts;
   return [
-    manglikCard(opts.manglik, chart, asOf),
+    manglikCard(chart, asOf),
     kaalSarpCard(opts.kaalSarp, chart, asOf),
     kemadrumaCard(chart, asOf),
     sadeSatiCard(chart),

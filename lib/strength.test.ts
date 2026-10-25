@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { grahaPoints, rateKaalSarp, rateKootDosha, rateManglik, rateSadeSati, rateYoga } from "./strength";
+import { rateKaalSarp, rateKootDosha, rateManglik, rateSadeSati, rateYoga } from "./strength";
 import { groupYogas } from "./yogas";
 import { cancellationLabel } from "./glossary";
 import { janamKundaliResponse } from "./kundlit-schemas";
@@ -9,46 +9,21 @@ const fx = loadKundliFixtures();
 const chartOf = (part: string) => fx.find((f) => f.file.includes(part))!.chart;
 const ratings = (part: string) => {
   const c = chartOf(part);
-  return Object.fromEntries(groupYogas(c, c.vimshottari.current.as_of).filter((y) => !y.nabhasa).map((y) => [y.key.split(".").pop(), y.rating.level?.[0]]));
+  return Object.fromEntries(groupYogas(c, c.vimshottari.current.as_of).filter((y) => !y.nabhasa).map((y) => [y.key.split(".").pop(), y.rating.level?.[0] ?? null]));
 };
 
-describe("graha points", () => {
-  const raipur = chartOf("raipur");
-  const g = (n: string) => raipur.grahas.find((x) => x.name === n)!;
-
-  it("gives reasons for each factor", () => {
-    expect(grahaPoints(g("Mars"))!.reason).toBe("Mangal: own sign, Bhava 7 (+), Bala (quarter results)");
-    expect(grahaPoints(g("Venus"))!.reason).toMatch(/combust/);
-    expect(grahaPoints(g("Mars"))!.points).toBe(1.5 + 1 + 0.25);
-  });
-
-  it("counts house 1 once (kendra and trikona)", () => {
-    const lagnaGraha = { ...g("Jupiter"), house: 1, dignity: "neutral", combust: false, avastha: "Vriddha" };
-    expect(grahaPoints(lagnaGraha)!.points).toBe(1);
-  });
-
-  it("Pancha Mahapurusha mode skips dignity and house", () => {
-    expect(grahaPoints(g("Mars"), "mahapurusha")!.points).toBe(0.25);
-  });
-
-  it("node-only mode uses house points only", () => {
-    expect(grahaPoints(g("Rahu"), "node")!.points).toBe(1); // Bhava 9
-  });
-
-  it("missing avastha means not rated", () => {
-    expect(grahaPoints({ ...g("Mars"), avastha: undefined })).toBeNull();
-  });
-});
-
 describe("yoga ratings match the calibration on all fixtures", () => {
+  // Composite strength of the forming planets (lib/astro/planet-strength.ts).
   it.each([
-    ["mumbai", { ubhayachari: "W", raja: "M", neechabhanga: "W" }],
-    ["raipur", { ruchaka: "W", vasi: "W", raja: "M", dhana: "M" }],
-    ["bengaluru", { ruchaka: "S", malavya: "M", chandra_mangala: "S", vasi: "M", raja: "S" }],
-    ["1999-04-12", { hamsa: "W", sunaphaa: "M", vesi: "W", raja: "M", dhana: "W", neechabhanga: "M" }],
-    ["2014-12-15", { ruchaka: "M", hamsa: "W", vesi: "W", raja: "S", dhana: "S" }],
-    ["2018-06-25", { bhadra: "W", durdhura: "M", vesi: "M", raja: "S", dhana: "M" }],
-    ["2021-06-15", { sasa: "M", gajakesari: "W", anaphaa: "W", ubhayachari: "W", raja: "M", dhana: "M", neechabhanga: "W" }],
+    // Neecha Bhanga itself is not rated (null); its Raja Yoga is.
+    // Partial Adhi with one benefic is rated Weak (a mild effect).
+    ["mumbai", { raja: "S", neecha_bhanga: null, neechabhanga: "W", adhi: "W", ubhayachari: "M" }],
+    ["raipur", { ruchaka: "M", raja: "M", dhana: "W", adhi: "W", vasi: "W" }],
+    ["bengaluru", { ruchaka: "S", malavya: "S", raja: "M", dhana: "M", harsha: "W", adhi: "W", yogakaraka_kendra: "S", chandra_mangala: "M", vasi: "M" }],
+    ["1999-04-12", { hamsa: "M", raja: "M", dhana: "W", neecha_bhanga: null, neechabhanga: "M", vimala: "W", sunaphaa: "M", vesi: "W" }],
+    ["2014-12-15", { ruchaka: "M", hamsa: "M", raja: "S", dhana: "S", vimala: "W", yogakaraka_kendra: "S", vesi: "W" }],
+    ["2018-06-25", { bhadra: "S", raja: "S", dhana: "S", neecha_bhanga: null, neechabhanga: "W", harsha: "M", adhi: "W", durdhura: "S", vesi: "W" }],
+    ["2021-06-15", { sasa: "M", gajakesari: "M", raja: "M", dhana: "M", neecha_bhanga: null, neechabhanga: "M", sarala: "W", adhi: "W", anaphaa: "W", ubhayachari: "M" }],
   ])("%s", (part, expected) => {
     expect(ratings(part)).toEqual(expected);
   });
@@ -61,16 +36,19 @@ describe("yoga rating rules", () => {
 
   it("a Bhanga lowers the rating one level and says so", () => {
     const r = by("yoga.ruchaka").rating;
-    expect(r.level).toBe("Weak");
+    expect(r.level).toBe("Moderate"); // Mars strong, one level lower
     expect(r.reasons.join()).toMatch(/Bhanga/);
     expect(r.reasons[0]).toMatch(/Pancha Mahapurusha conditions met/);
   });
 
-  it("the strongest combination wins", () => {
-    const dhana = by("yoga.dhana");
-    const one = rateYoga({ ...dhana, combinations: [dhana.combinations[0]] }, raipur);
-    expect(["Moderate", "Weak"]).toContain(one.level);
-    expect(dhana.rating.level).toBe("Moderate");
+  it("reasons name each planet's strength and main factors", () => {
+    expect(by("yoga.raja").rating.reasons.join(" | ")).toMatch(/Shukra: strong — .*combust/);
+  });
+
+  it("a weak planet caps the yoga and the reason says so", () => {
+    const r = rateYoga({ key: "yoga.test", nabhasa: false, status: "present", combinations: [{ participants: ["Mars", "Saturn"] }] }, raipur);
+    expect(r.level).not.toBe("Strong"); // Saturn is weak (8th, combust)
+    expect(r.basis).toEqual(["Mars", "Saturn"]);
   });
 
   it("nodes are left out when another graha takes part", () => {
@@ -82,9 +60,9 @@ describe("yoga rating rules", () => {
     expect(by("nabhasa.pasha").rating).toMatchObject({ level: null, label: "Not rated" });
   });
 
-  it("missing avastha gives 'Not rated'", () => {
+  it("missing avastha no longer blocks a rating (it is a minor factor)", () => {
     const old = { ...raipur, grahas: raipur.grahas.map((g) => ({ ...g, avastha: undefined })) };
-    expect(groupYogas(old, asOf).find((y) => y.key === "yoga.raja")!.rating.level).toBeNull();
+    expect(groupYogas(old, asOf).find((y) => y.key === "yoga.raja")!.rating.level).not.toBeNull();
   });
 
   it("Kundlit's strength_score is stripped at parse time", () => {
@@ -97,8 +75,8 @@ describe("yoga rating rules", () => {
 
 describe("dosha intensity", () => {
   it("Manglik: Kundlit severity, not lowered again for cancellations", () => {
-    for (const m of loadManglikFixtures()) {
-      const r = rateManglik(m); // both fixtures are mild, with 1 and 2 cancellations
+    for (const m of loadManglikFixtures().filter((f) => f.severity === "mild")) {
+      const r = rateManglik(m); // the Raipur and Bengaluru fixtures: mild, with 1 and 2 cancellations
       expect(r.level).toBe("Low");
       expect(r.reasons.join()).toMatch(/already reflected/);
     }

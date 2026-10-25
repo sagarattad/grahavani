@@ -97,6 +97,8 @@ export const KOOT_CANCELLATIONS: Record<string, Label> = {
 
 export const MANGLIK_SEVERITY: Record<string, Label> = {
   none: { en: "None", hi: "" },
+  low: { en: "Low", hi: "" },
+  cancelled: { en: "Formed but cancelled", hi: "" },
   mild: { en: "Mild", hi: "" },
   medium: { en: "Medium", hi: "" },
   moderate: { en: "Moderate", hi: "" },
@@ -105,10 +107,11 @@ export const MANGLIK_SEVERITY: Record<string, Label> = {
   severe: { en: "Strong", hi: "" },
 };
 
-// The yoga checklist. Every rule id here has appeared in a real Kundlit
-// response (see tests/fixtures/kundlit and docs/crosscheck.md), so a missing
-// one can honestly be shown as "Not present". Order = display order.
-export const YOGA_CHECKLIST: { ruleId: string; label: Label }[] = [
+// The yoga checklist. Kundlit rule ids have appeared in real Kundlit responses
+// (see tests/fixtures/kundlit and docs/crosscheck.md); `grahavani: true` ids are
+// detected by Grahavani's own rules (lib/astro/rules.ts). Either way a missing
+// one can honestly be shown as "Not formed". Order = display order.
+export const YOGA_CHECKLIST: { ruleId: string; label: Label; grahavani?: true }[] = [
   { ruleId: "yoga.ruchaka", label: { en: "Ruchaka", hi: "", meaning: "Pancha Mahapurusha of Mangal" } },
   { ruleId: "yoga.bhadra", label: { en: "Bhadra", hi: "", meaning: "Pancha Mahapurusha of Budh" } },
   { ruleId: "yoga.hamsa", label: { en: "Hamsa", hi: "", meaning: "Pancha Mahapurusha of Guru" } },
@@ -116,8 +119,14 @@ export const YOGA_CHECKLIST: { ruleId: string; label: Label }[] = [
   { ruleId: "yoga.sasa", label: { en: "Sasa", hi: "", meaning: "Pancha Mahapurusha of Shani" } },
   { ruleId: "yoga.gajakesari", label: { en: "Gajakesari", hi: "", meaning: "Guru in a kendra from Chandra" } },
   { ruleId: "yoga.raja", label: { en: "Raj Yoga", hi: "", meaning: "kendra and trikona lords linked" } },
-  { ruleId: "yoga.dhana", label: { en: "Dhana Yoga", hi: "", meaning: "wealth combination" } },
-  { ruleId: "yoga.neechabhanga", label: { en: "Neechabhanga Raj Yoga", hi: "", meaning: "a debilitated graha's weakness cancelled" } },
+  { ruleId: "yoga.dhana", label: { en: "Dhana Yoga", hi: "", meaning: "lords of 1, 2, 5, 9, 11 linked by conjunction, mutual aspect or exchange" }, grahavani: true },
+  { ruleId: "yoga.neecha_bhanga", label: { en: "Neecha Bhanga", hi: "", meaning: "a debilitated graha's weakness cancelled" }, grahavani: true },
+  { ruleId: "yoga.neechabhanga", label: { en: "Neechabhanga Raj Yoga", hi: "", meaning: "a cancelled debility that also gives rise (needs kendra / trikona, not combust)" }, grahavani: true },
+  { ruleId: "yoga.harsha", label: { en: "Harsha", hi: "", meaning: "Viparita Raja Yoga: 6th lord in 6, 8 or 12" }, grahavani: true },
+  { ruleId: "yoga.sarala", label: { en: "Sarala", hi: "", meaning: "Viparita Raja Yoga: 8th lord in 6, 8 or 12" }, grahavani: true },
+  { ruleId: "yoga.vimala", label: { en: "Vimala", hi: "", meaning: "Viparita Raja Yoga: 12th lord in 6, 8 or 12" }, grahavani: true },
+  { ruleId: "yoga.adhi", label: { en: "Adhi Yoga", hi: "", meaning: "natural benefics 6th, 7th and 8th from Chandra" }, grahavani: true },
+  { ruleId: "yoga.yogakaraka_kendra", label: { en: "Yogakaraka in a kendra", hi: "", meaning: "the planet ruling both a kendra and a trikona, placed in a kendra" }, grahavani: true },
   { ruleId: "yoga.chandra_mangala", label: { en: "Chandra-Mangala", hi: "", meaning: "Chandra and Mangal together" } },
   { ruleId: "yoga.sunaphaa", label: { en: "Sunapha", hi: "", meaning: "a graha 2nd from Chandra" } },
   { ruleId: "yoga.anaphaa", label: { en: "Anapha", hi: "", meaning: "a graha 12th from Chandra" } },
@@ -137,6 +146,8 @@ export const YOGA_CATEGORIES: Record<string, string> = {
   raja: "Raj yoga",
   dhana: "Dhana yoga",
   cancellation: "Bhanga",
+  viparita: "Viparita Raja Yoga",
+  neecha_bhanga: "Debility cancelled",
 };
 export const yogaCategory = (c: string | null | undefined) =>
   !c ? "" : c.startsWith("nabhasa") ? "Nabhasa yoga" : (YOGA_CATEGORIES[c] ?? humanize(c));
