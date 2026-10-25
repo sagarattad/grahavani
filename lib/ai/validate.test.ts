@@ -201,8 +201,10 @@ describe("ratings in fixed phrases", () => {
     expect(check("Neechabhanga Raj Yoga is rated Moderate.").join()).toMatch(/neechabhanga raj: .*computed no rating/);
   });
 
-  it("a fixed phrase in a sentence naming two items, or none, is rejected", () => {
+  it("a fixed phrase shared by items with different ratings, or naming none, is rejected", () => {
     expect(check("Raj Yoga and Dhana Yoga are rated Moderate.").join()).toMatch(/clearly belong to one/);
+    // Shared by items that all have that rating (a live failure).
+    expect(check("Its Raj Yoga is rated Moderate; its Dhana Yoga and Vasi are each rated Weak.")).toEqual([]);
     expect(check("It is rated Moderate.").join()).toMatch(/clearly belong to one/);
   });
 
@@ -210,6 +212,9 @@ describe("ratings in fixed phrases", () => {
     expect(check("Raj Yoga is rated Moderate, while Vasi is rated Weak.")).toEqual([]);
     expect(check("Raj Yoga is rated Moderate, while Ruchaka is rated Strong.").join()).toMatch(/Ruchaka: text says "rated Strong"/);
     expect(check("Manglik Dosha has intensity: Medium and Raj Yoga is rated Moderate.")).toEqual([]);
+    // The phrase's own clause names one item (a live failure).
+    expect(check("Ruchaka has Bhanga cancellation, Manglik Dosha remains at intensity: Medium.")).toEqual([]);
+    expect(check("Ruchaka has Bhanga cancellation, Manglik Dosha remains at intensity: High.").join()).toMatch(/computed intensity: Medium/);
   });
 
   it("a rating can refer back to the item named just before (the live failures)", () => {
@@ -253,6 +258,10 @@ describe("evidence rules (Oct 2026 review)", () => {
     const sun = raipur.grahas.find((g) => g.name === "Sun")!;
     const d10 = { 1: "Mesha", 2: "Vrishabha", 3: "Mithuna", 4: "Karka", 5: "Simha", 6: "Kanya", 7: "Tula", 8: "Vrishchika", 9: "Dhanu", 10: "Makara", 11: "Kumbha", 12: "Meena" }[sun.dashamsha!.sign_num];
     expect(check(`In the D10, Surya is in ${d10}.`)).toEqual([]);
+    // The D10 named in the previous sentence carries through its paragraph (a live failure), not into the next one.
+    expect(check(`The D10 career chart is read next. Surya in ${d10} supports authority.`)).toEqual([]);
+    expect(check(`The D10 career chart is read next.\n\nSurya in ${d10} supports authority.`).join()).toMatch(/not in the computed facts/);
+    expect(check(`The D10 career chart is read next. In the birth chart, Surya in ${d10} supports authority.`).join()).toMatch(/not in the computed facts/);
   });
 
   it("allows naming partial Shadbala components", () => {

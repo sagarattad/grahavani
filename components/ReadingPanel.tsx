@@ -44,6 +44,7 @@ export function ReadingPanel({ kind, slug }: { kind: ReadingKind; slug: string }
       const reader = res.body!.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
+      let finished = false;
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -60,11 +61,19 @@ export function ReadingPanel({ kind, slug }: { kind: ReadingKind; slug: string }
           } else if (ev.type === "done") {
             setReading(ev.data);
             setStatus("done");
+            finished = true;
           } else if (ev.type === "failed") {
             setReading(null);
             setStatus("failed");
+            finished = true;
           }
         }
+      }
+      // The server was cut off (e.g. its time limit) before the final event.
+      if (!finished) {
+        setReading(null);
+        setError("The reading was interrupted. Please try again.");
+        setStatus("error");
       }
     } catch {
       setError("Network error while getting the reading.");

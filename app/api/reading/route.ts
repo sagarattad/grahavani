@@ -5,7 +5,8 @@ import { factsFor } from "@/lib/targets";
 import { aiBudgetLeft, readingCacheKey, streamReading } from "@/lib/ai/reading";
 import { clientIpHash, jsonError, verifyTurnstile, withinCap } from "@/lib/request";
 
-export const maxDuration = 120;
+// Two attempts (one retry after a failed check) can take about 90 s each with the v8 facts.
+export const maxDuration = 300;
 
 const body = z.object({
   kind: z.enum(["kundli", "milan", "manglik"]),

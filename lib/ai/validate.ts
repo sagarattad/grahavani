@@ -131,11 +131,16 @@ function checkRatings(text: string, ratings: NonNullable<ValidationContext["rati
     const at = m.index!;
     const { start, end } = sentenceOf(at);
     const since = new Set(names.filter((n) => n.at >= Math.max(from, start) && n.at < at).map((n) => n.key));
+    // The phrase's own clause ("Ruchaka has a Bhanga, Manglik Dosha remains at intensity: Medium").
+    const clauseStart = Math.max(from, start, ...[...text.slice(start, at).matchAll(/[,;:–—]|\bwhile\b/g)].map((c) => start + c.index! + c[0].length));
+    const inClause = new Set(names.filter((n) => n.at >= clauseStart && n.at < at).map((n) => n.key));
     const inSentence = new Set(names.filter((n) => n.at >= start && n.at < end).map((n) => n.key));
     const before = names.filter((n) => n.at < at);
     from = at + m[0].length;
     const owner =
-      since.size === 1
+      inClause.size === 1
+        ? [...inClause][0]
+        : since.size === 1
         ? [...since][0]
         : since.size > 1
           ? null
@@ -144,6 +149,10 @@ function checkRatings(text: string, ratings: NonNullable<ValidationContext["rati
             : inSentence.size === 0 && before.length
               ? before[before.length - 1].key
               : null;
+    // "Dhana Yoga and Vasi are each rated Weak": fine when every item named has that rating.
+    const shared = inClause.size > 1 ? inClause : since;
+    const ratedAs = (key: string) => ratings.some((r) => r.key === key && r.rating === normRating(m));
+    if (!owner && shared.size > 1 && [...shared].every(ratedAs)) continue;
     if (!owner) {
       problems.push(`Rating "${m[0]}" must clearly belong to one Yoga or Dosha (name it just before the rating)`);
       continue;
@@ -159,6 +168,30 @@ function checkRatings(text: string, ratings: NonNullable<ValidationContext["rati
 }
 
 const sentencesOf = (text: string) => text.split(/(?<=[.!?;])\s+|\n+/).filter(Boolean);
+
+const D9_RE = /navamsa|navamsha|\bd-?9\b/i;
+const D10_RE = /dashamsha|dasamsa|dashamsa|\bd-?10\b/i;
+const D1_RE = /\bd-?1\b|birth chart|rashi chart/i;
+
+/**
+ * Sentences with the divisional charts they may refer to. A sentence naming
+ * the D9 or D10 sets it for the rest of its paragraph ("The D10 has Karka
+ * Lagna. Mangal in Meena…") until a sentence names another chart.
+ */
+function sentencesWithVarga(fields: string[]) {
+  const out: { sentence: string; d9: boolean; d10: boolean }[] = [];
+  for (const para of fields.flatMap((f) => f.split(/\n+/))) {
+    let carried: "d9" | "d10" | null = null;
+    for (const sentence of sentencesOf(para)) {
+      const d9 = D9_RE.test(sentence);
+      const d10 = D10_RE.test(sentence);
+      if (d9 !== d10) carried = d9 ? "d9" : "d10";
+      else if (!d9 && D1_RE.test(sentence)) carried = null;
+      out.push({ sentence, d9: d9 || carried === "d9", d10: d10 || carried === "d10" });
+    }
+  }
+  return out;
+}
 
 export function validateReading(output: unknown, ctx: ValidationContext): string[] {
   const problems: string[] = [];
@@ -180,7 +213,7 @@ export function validateReading(output: unknown, ctx: ValidationContext): string
   // 0. Ratings: fixed phrases must match FACTS (checked per text field).
   if (ctx.ratings?.length) for (const field of collectStrings(output)) problems.push(...checkRatings(field, ctx.ratings));
 
-  for (const sentence of sentencesOf(collectStrings(output).join("\n"))) {
+  for (const { sentence, d9, d10 } of sentencesWithVarga(collectStrings(output))) {
     // Never present a rating as Shadbala.
     if (SHADBALA_RE.test(sentence) && RATING_WORD_RE.test(sentence) && !NOT_COVERED_RE.test(sentence))
       problems.push(`"${sentence.slice(0, 80)}" presents a rating as Shadbala`);
@@ -189,9 +222,9 @@ export function validateReading(output: unknown, ctx: ValidationContext): string
     const absolute = sentence.match(DETERMINISTIC_RE);
     if (absolute) problems.push(`"${absolute[0]}" is an absolute negative; describe the factors and their balance instead`);
 
-    // 2. Graha–Rashi / Graha–Bhava pairs must exist in the facts (D9 / D10 when the sentence names them).
-    const mentionsD9 = /navamsa|navamsha|\bd9\b/i.test(sentence);
-    const mentionsD10 = /dashamsha|dasamsa|dashamsa|\bd10\b/i.test(sentence);
+    // 2. Graha–Rashi / Graha–Bhava pairs must exist in the facts (D9 / D10 when the paragraph has named them).
+    const mentionsD9 = d9;
+    const mentionsD10 = d10;
     for (const m of sentence.matchAll(PLACEMENT_RE)) {
       const api = grahaAlias.get(m[1].toLowerCase().replace(/\s+/g, " "));
       if (!api) continue;
