@@ -5,16 +5,17 @@ import { GRAHAS, KOOTS, cancellationLabel, graha, kootLabel, rashi, nakshatra, s
 import type { Chart, DashaCurrent, KaalSarp, Manglik, Milan } from "../kundlit-schemas";
 import { dateOnly } from "../format";
 import { antardashas, contains, type Window } from "../dasha";
-import { yogaChecklist } from "../yogas";
+import { sharedLinks, yogaChecklist } from "../yogas";
 import { buildDoshas, kaalSarpCard, kemadrumaCard, manglikCard, type DoshaCard } from "../doshas";
 import { timingCandidates } from "../timing";
 import { doshaState, sortKoots } from "../summaries";
-import { RATING_NOTE, rateKootDosha, rateManglik, ratingPhrase, type Rating } from "../strength";
+import { rateKootDosha, rateManglik, ratingPhrase, type Rating } from "../strength";
 import { chartStrengths } from "../astro/planet-strength";
 import { functionalNature } from "../astro/functional";
-import { dignityText } from "../astro/relations";
+import { dignityText, vargaChange } from "../astro/relations";
 import { ownHouseLords } from "../astro/rules";
 import { marriageFactors } from "../astro/marriage";
+import { marriageSignificators, marriageWindows } from "../astro/marriage-timing";
 import { birthTimeCheck, careerD10, transitOverlaps } from "../astro/timing-checks";
 import { readDashaLord, type DashaLordReading } from "../astro/dasha-lords";
 import { dasamsaSign } from "../astro/varga";
@@ -30,6 +31,8 @@ export type ValidationContext = {
   allowedDates?: string[];
   /** Rated Yogas / Doshas: the names the text may use for each, and its fixed rating phrase. */
   ratings?: RatingEntry[];
+  /** Planets (API names) whose composite strength lists Dig bala as a factor. */
+  digBalaFactor?: string[];
 };
 
 export type RatingEntry = { key: string; names: string[]; rating: string };
@@ -117,6 +120,8 @@ export function kundliFacts(chart: Chart, dasha: DashaCurrent, extras: KundliExt
   const d10 = careerD10(chart);
   const bt = birthTimeCheck(chart, rashi);
   const tr = transitOverlaps(chart, asOf);
+  const sig = marriageSignificators(chart);
+  const windows = marriageWindows(chart, asOf);
   const lordFact = (r: DashaLordReading) => ({
     lord: g(r.lord),
     reading: r.summary,
@@ -154,7 +159,10 @@ export function kundliFacts(chart: Chart, dasha: DashaCurrent, extras: KundliExt
         vargottama: x.vargottama,
         ...(x.avastha ? { avastha: `${x.avastha} (minor factor)` } : {}),
         strength: s.level,
-        strength_factors: [...s.factors].sort((a, b) => Math.abs(b.points) - Math.abs(a.points)).slice(0, 4).map((f) => f.label),
+        ...(s.borderline ? { strength_borderline: "close to a level threshold; a small change in one factor would change the level" } : {}),
+        // Every factor of the composite strength, so the reading never names one that is not here.
+        strength_factors: [...s.factors].sort((a, b) => Math.abs(b.points) - Math.abs(a.points)).map((f) => f.label),
+        ...(s.dignity && s.d9Dignity ? { d9_vs_d1: vargaChange(s.dignity, s.d9Dignity) } : {}),
         ...(s.shadbala.uccha !== null
           ? { partial_shadbala_virupas: { uccha: Math.round(s.shadbala.uccha), dig: Math.round(s.shadbala.dig!), ...(s.shadbala.paksha !== null ? { paksha: Math.round(s.shadbala.paksha) } : {}) } }
           : {}),
@@ -170,8 +178,6 @@ export function kundliFacts(chart: Chart, dasha: DashaCurrent, extras: KundliExt
       atmakaraka: g(mf.atmakaraka),
     },
     own_house_lords: ownHouseLords(chart).map((x) => x.text),
-    rating_basis: RATING_NOTE,
-    not_computed: ["Sarvashtakavarga", "full Shadbala (only the Uccha, Dig and the Moon's Paksha components)"],
     marriage: {
       d1_7th_lord: { graha: g(mf.d1.seventhLord), bhava: mf.d1.lordHouse, strength: mf.d1.lordStrength },
       venus_d1: { dignity: mf.d1.venusDignity, strength: mf.d1.venusStrength },
@@ -182,6 +188,16 @@ export function kundliFacts(chart: Chart, dasha: DashaCurrent, extras: KundliExt
       darakaraka: { graha: g(mf.darakaraka.planet), scheme: mf.darakaraka.scheme, eight_karaka_scheme: g(mf.darakaraka.eightKaraka) },
       upapada_lagna: { rashi: rashi(mf.upapada.sign), lord: g(mf.upapada.lord) },
       d1_vs_d9: mf.comparison,
+      significators: [...sig.primary].map(([p, why]) => ({ graha: g(p), as: why })),
+      timing_windows: windows.map((w) => ({
+        from: dateOnly(w.start),
+        to: dateOnly(w.end),
+        dasha: w.period.split("–").map(graha).join("–"),
+        both_lords_significators: w.rank === "MD and AD",
+        double_transit: w.why,
+        also_from_chandra: w.moonAlso,
+        ...(w.secondary.length ? { secondary: w.secondary } : {}),
+      })),
     },
     ...(d10
       ? {
@@ -190,14 +206,16 @@ export function kundliFacts(chart: Chart, dasha: DashaCurrent, extras: KundliExt
             d10_10th: rashi(d10.tenthSign),
             d10_10th_lord: g(d10.tenthLord),
             planets_in_d10: d10.planets.map((p) => ({ graha: g(p.name), d10_rashi: rashi(p.sign), dignity: p.dignity })),
+            ...(bt?.sensitive.d10 ? { birth_time_sensitive: bt.notesBy.d10 } : {}),
           },
         }
       : {}),
     ...(bt
       ? {
           birth_time: {
-            minutes_until_d1_lagna_changes: { earlier: Math.round(bt.d1.earlier), later: Math.round(bt.d1.later) },
-            minutes_until_d9_lagna_changes: { earlier: Math.round(bt.d9.earlier), later: Math.round(bt.d9.later) },
+            minutes_until_d1_lagna_changes: { earlier: Math.floor(bt.d1.earlier), later: Math.floor(bt.d1.later) },
+            minutes_until_d9_lagna_changes: { earlier: Math.floor(bt.d9.earlier), later: Math.floor(bt.d9.later) },
+            minutes_until_d10_lagna_changes: { earlier: Math.floor(bt.d10.earlier), later: Math.floor(bt.d10.later) },
             warning: bt.warn,
             notes: bt.notes,
           },
@@ -209,7 +227,16 @@ export function kundliFacts(chart: Chart, dasha: DashaCurrent, extras: KundliExt
     },
     transits: {
       saturn_overlaps: tr.overlaps.map((o) => ({ transit: o.transit, from: dateOnly(o.from), to: dateOnly(o.to), overlaps_dasha: `${graha(o.period.split("–")[0])}–${graha(o.period.split("–")[1])}`, dasha_from: dateOnly(o.periodFrom), dasha_to: dateOnly(o.periodTo) })),
-      ...(tr.jupiterNow ? { jupiter_now: { rashi: rashi(tr.jupiterNow.sign), house_from_chandra: tr.jupiterNow.fromMoon } } : {}),
+      jupiter_now: { rashi: rashi(tr.jupiterNow.sign), house_from_chandra: tr.jupiterNow.fromMoon, house_from_lagna: tr.jupiterNow.fromLagna },
+      jupiter_transits: tr.jupiter.slice(0, 8).map((j) => ({
+        rashi: rashi(j.sign),
+        from: dateOnly(j.from),
+        to: dateOnly(j.to),
+        house_from_chandra: j.fromMoon,
+        house_from_lagna: j.fromLagna,
+        favourable_from_chandra: j.favourable,
+        overlaps_dasha: j.periods.map((p) => p.split("–").map(graha).join("–")),
+      })),
     },
     yogas_present: present.map((y) => ({
       yoga: y.name,
@@ -222,6 +249,7 @@ export function kundliFacts(chart: Chart, dasha: DashaCurrent, extras: KundliExt
       traditionally_active_in: y.nabhasa ? "throughout life (Nabhasa yoga)" : y.windows.map(windowFact),
     })),
     yogas_not_present: absent.map((a) => a.name),
+    shared_links: sharedLinks(present).map((l) => ({ planets: l.planets.map(graha), yogas: l.yogas, note: "these yogas rest on the same planetary link; count it as one support" })),
     doshas: doshaCards.map(doshaFact),
     dasha: {
       as_of: dateOnly(asOf),
@@ -248,6 +276,7 @@ export function kundliFacts(chart: Chart, dasha: DashaCurrent, extras: KundliExt
       ...present.map((y) => ratingEntry(y.key, y.name, y.rating, "yoga")),
       ...doshaCards.filter((c) => c.rating.level).map((c) => ratingEntry(c.key, c.name, c.rating, "dosha")),
     ],
+    digBalaFactor: [...strengths.values()].filter((s) => s.factors.some((f) => f.label.startsWith("dig bala"))).map((s) => s.name),
   };
   return { facts, ctx };
 }

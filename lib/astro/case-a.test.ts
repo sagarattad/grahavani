@@ -15,6 +15,11 @@ import { marriageFactors } from "./marriage";
 import { birthTimeCheck } from "./timing-checks";
 import { readDashaLord } from "./dasha-lords";
 import { loadKundliFixtures } from "../../tests/fixtures";
+import { careerD10 } from "./timing-checks";
+import { sharedLinks } from "../yogas";
+import { marriageWindows } from "./marriage-timing";
+import { dashaBalanceText } from "../format";
+import { kemadrumaCard } from "../doshas";
 
 const DIR = path.join(__dirname, "../../tests/fixtures/kundlit");
 const present = existsSync(path.join(DIR, "janam-kundali-case-a.json")) && existsSync(path.join(DIR, "case-a.expected.json"));
@@ -66,14 +71,15 @@ describe.skipIf(!present)("regression: case A (local-only fixture)", () => {
     expect(viparita(chart).find((v) => v.key === "yoga.sarala")).toMatchObject({ lord: "Saturn", house: 8, formed: true });
   });
 
-  it("Venus Neecha Bhanga: Jupiter in a kendra from the Moon, Mercury (dispositor, exalted) conjunct; Raja Yoga partial", () => {
+  it("Venus Neecha Bhanga: Jupiter in a kendra from the Moon, Mercury (dispositor, exaltation-sign planet) conjunct; Raja Yoga partial", () => {
     const v = neechaBhanga(chart).find((n) => n.planet === "Venus")!;
     expect(v.state).toBe("formed");
     expect(v.rules).toEqual([
       "Jupiter, lord of Venus's exaltation sign, is in a kendra from the Moon",
       "Venus is conjunct its dispositor Mercury",
-      "Venus is conjunct Mercury, which is exalted in this sign",
+      "Venus is conjunct Mercury, whose exaltation sign this is",
     ]);
+    expect(v.countText).toBe(expected.round2.neecha_bhanga_count);
     expect(v.raja).toMatchObject({ state: "partial", why: "Venus is in Bhava 3, not a kendra or trikona; Venus is combust" });
     const nbry = groupYogas(chart, chart.vimshottari.current.as_of).find((y) => y.key === "yoga.neechabhanga")!;
     expect(nbry.rating.level).toBe("Weak");
@@ -131,8 +137,65 @@ describe.skipIf(!present)("regression: case A (local-only fixture)", () => {
     expect(ratingContradictions(ys, s)).toEqual([]);
     for (const k of ["yoga.gajakesari", "yoga.raja"]) {
       const y = ys.find((x) => x.key === k)!;
-      expect(y.rating.reasons.join(" | "), k).toMatch(/Chandra: moderate/);
-      expect(y.rating.reasons.join(" | "), k).not.toMatch(/very little/);
+      expect(y.rating.reasons.join(" | "), k).toMatch(/Chandra: strong/);
+      expect(y.rating.reasons.join(" | "), k).toMatch(/Borderline: depends on Chandra/);
     }
+  });
+
+  describe("round 2 (Oct 2026)", () => {
+    const r2 = present ? expected.round2 : null!;
+    const ys = present ? groupYogas(chart, chart.vimshottari.current.as_of) : [];
+    const by = (k: string) => ys.find((y) => y.key.split(".").pop() === k);
+
+    it("planet levels, scores and borderline flags", () => {
+      expect(Object.fromEntries(Object.keys(r2.levels).map((n) => [n, s.get(n)!.level]))).toEqual(r2.levels);
+      for (const [n, v] of Object.entries(r2.scores)) expect(s.get(n)!.score, n).toBeCloseTo(v as number, 6);
+      expect([...s.values()].filter((x) => x.borderline).map((x) => x.name)).toEqual(r2.borderline);
+    });
+
+    it("D1 dignity with BPHS zones and D9 / D10 dignity with D1 tatkalika", () => {
+      for (const [n, v] of Object.entries(r2.d1_dignity)) expect(s.get(n)!.dignity!.label, n).toBe(v);
+      for (const [n, v] of Object.entries(r2.d9_dignity)) expect(s.get(n)!.d9Dignity!.label, n).toBe(v);
+      const d10 = careerD10(chart)!;
+      expect(d10.lagnaSign).toBe(r2.d10_lagna);
+      for (const [n, v] of Object.entries(r2.d10_dignity)) {
+        const text = d10.planets.find((p) => p.name === n)!.dignity;
+        expect(text === v || text.endsWith(`compound: ${v})`), `${n}: ${text}`).toBe(true);
+      }
+    });
+
+    it("yoga ratings, the level-average arithmetic, Dhana and shared links", () => {
+      expect(Object.fromEntries(Object.keys(r2.yogas).map((k) => [k, by(k)?.rating.level]))).toEqual(r2.yogas);
+      expect(by("vesi")!.rating.reasons.join()).toMatch(/average \d(\.\d+)?, rounded down/);
+      expect(Boolean(by("dhana"))).toBe(r2.dhana_formed);
+      expect(sharedLinks(ys)).toEqual([r2.shared_link]);
+    });
+
+    it("Venus D1 → D9 change", () => {
+      const verdict = { improved: "improved in the D9", weakened: "weakened in the D9", confirmed: "the D9 confirms" }[r2.venus_d9 as "improved"];
+      expect(marriageFactors(chart).comparison[0]).toContain(verdict);
+    });
+
+    it("birth-time minutes, rounded down: D1, D9 and D10", () => {
+      const bt = birthTimeCheck(chart, (n) => String(n))!;
+      for (const k of ["d1", "d9", "d10"] as const) expect([Math.floor(bt[k].earlier), Math.floor(bt[k].later)], k).toEqual(r2.birth_time_minutes[k]);
+      expect(bt.sensitive).toEqual({ d1: false, d9: true, d10: true });
+    });
+
+    it("cleanups: Manglik signed total, Dasha balance from the timeline, no 'felt in' for a cancelled Kemadruma", () => {
+      expect(computeManglik(chart).grahavani.steps.at(-1)).toContain(r2.manglik_total);
+      expect(dashaBalanceText(chart.vimshottari.timeline[0].start, chart.vimshottari.timeline[0])).toBe(r2.dasha_balance);
+      expect(kemadrumaCard(chart, chart.vimshottari.current.as_of).windows).toEqual([]);
+    });
+
+    it("marriage windows: significator Antardashas with a same-target double transit, well under half the span", () => {
+      const asOf = chart.vimshottari.current.as_of;
+      const w = marriageWindows(chart, asOf, 20);
+      expect(w.map((x) => [x.start.slice(0, 7), x.period])).toEqual(r2.marriage_windows);
+      expect(w.every((x) => x.rank === "MD and AD")).toBe(true);
+      const span = new Date(chart.vimshottari.timeline.find((p) => p.lord === "Jupiter")!.end).getTime() - new Date(asOf).getTime();
+      const covered = w.reduce((t, x) => t + new Date(x.end).getTime() - new Date(x.start).getTime(), 0);
+      expect(covered / span).toBeLessThan(0.15);
+    });
   });
 });

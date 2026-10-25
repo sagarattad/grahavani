@@ -60,10 +60,9 @@ export function DoshaCards({ cards }: { cards: DoshaCard[] }) {
                   ))}
                 </ul>
               )}
-              {c.asOf && c.coveredUntil && (
+              {c.ranges.length > 0 && (
                 <p className="mt-1 text-xs text-muted">
-                  Kundlit lists Shani transit periods that end by {dateOnly(c.coveredUntil)} (as of {dateOnly(c.asOf)}). A period that
-                  starts before then but ends later is not shown.
+                  Saturn&apos;s sign changes computed by Grahavani (Lahiri), including retrograde returns, over the current and next Mahadasha.
                 </p>
               )}
               {c.rating.level && <RatingLine rating={c.rating} kind="dosha" />}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { compoundRelation, debilitationSign, dignityOf, dignityText, naturalRelation, ownSigns, temporaryFriend } from "./relations";
+import { compoundRelation, debilitationSign, dignityOf, dignityText, naturalRelation, ownSigns, temporaryFriend, vargaChange, DIGNITY_RANK } from "./relations";
 import { functionalNature, houseLords } from "./functional";
 
 describe("planetary relationships", () => {
@@ -28,14 +28,42 @@ describe("planetary relationships", () => {
   });
 
   it("Jupiter in Vrishchika with Mars in Tula: friend's sign, compound great friend", () => {
-    const d = dignityOf("Jupiter", 8, { Mars: 7 }, "neutral");
+    const d = dignityOf("Jupiter", 8, { Jupiter: 8, Mars: 7 }, 14.4);
     expect(d).toMatchObject({ label: "great friend", natural: "friend", compound: "great friend", signLord: "Mars" });
     expect(dignityText(d)).toBe("friend's sign (compound: great friend)");
   });
 
-  it("Kundlit's exalted / moolatrikona / own / debilitated class is kept", () => {
-    expect(dignityOf("Moon", 2, {}, "moolatrikona").label).toBe("moolatrikona");
-    expect(dignityOf("Venus", 6, {}, "debilitated").label).toBe("debilitated");
+  it("BPHS degree zones apply in the D1 for every planet", () => {
+    const at = (p: Parameters<typeof dignityOf>[0], sign: number, deg: number) => dignityOf(p, sign, {}, deg).label;
+    expect([at("Mercury", 6, 10), at("Mercury", 6, 17), at("Mercury", 6, 25)]).toEqual(["exalted", "moolatrikona", "own"]);
+    expect([at("Moon", 2, 2), at("Moon", 2, 12)]).toEqual(["exalted", "moolatrikona"]);
+    expect([at("Sun", 5, 10), at("Sun", 5, 25), at("Sun", 1, 25)]).toEqual(["moolatrikona", "own", "exalted"]);
+    expect([at("Mars", 1, 5), at("Mars", 1, 20), at("Mars", 8, 5)]).toEqual(["moolatrikona", "own", "own"]);
+    expect([at("Jupiter", 9, 5), at("Jupiter", 9, 15)]).toEqual(["moolatrikona", "own"]);
+    expect([at("Venus", 7, 10), at("Venus", 7, 20), at("Venus", 6, 10)]).toEqual(["moolatrikona", "own", "debilitated"]);
+    expect([at("Saturn", 11, 10), at("Saturn", 11, 25), at("Saturn", 7, 25)]).toEqual(["moolatrikona", "own", "exalted"]);
+  });
+
+  it("vargas: sign level, exaltation wins over own / moolatrikona", () => {
+    expect(dignityOf("Mercury", 6, {}).label).toBe("exalted");
+    expect(dignityOf("Moon", 2, {}).label).toBe("exalted");
+    expect(dignityOf("Sun", 5, {}).label).toBe("own");
+  });
+
+  it("temporary friendship uses the D1 signs passed in, not the varga signs", () => {
+    const d1 = { Moon: 2, Mercury: 6, Saturn: 11, Venus: 6, Sun: 5 };
+    expect(dignityOf("Moon", 11, d1).label).toBe("friend");
+    expect(dignityOf("Mercury", 5, d1).label).toBe("great friend");
+    expect(dignityOf("Saturn", 3, d1).label).toBe("neutral");
+    expect(dignityOf("Venus", 11, d1).label).toBe("neutral");
+  });
+
+  it("D1 → D9 rank: improved, weakened, confirmed; moolatrikona above own", () => {
+    expect(DIGNITY_RANK.indexOf("moolatrikona")).toBeGreaterThan(DIGNITY_RANK.indexOf("own"));
+    const deb = dignityOf("Venus", 6, {}, 10);
+    expect(vargaChange(deb, dignityOf("Venus", 11, { Venus: 6, Saturn: 11 }))).toBe("improved");
+    expect(vargaChange(dignityOf("Mars", 10, {}), dignityOf("Mars", 4, {}))).toBe("weakened");
+    expect(vargaChange(dignityOf("Jupiter", 12, {}), dignityOf("Jupiter", 9, {}))).toBe("confirmed");
   });
 
   it("D9 dignity is computed from signs (no Kundlit class)", () => {

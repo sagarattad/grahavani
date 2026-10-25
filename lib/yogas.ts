@@ -105,6 +105,31 @@ export function groupYogas(chart: Chart, asOf: string): YogaItem[] {
   return [...groups.values()].sort((a, b) => (order.get(a.key) ?? 99) - (order.get(b.key) ?? 99));
 }
 
+export type SharedLink = { planets: string[]; yogas: string[] };
+
+/**
+ * Present yogas that rest on the same set of planets (e.g. Gajakesari and Raj
+ * Yoga both from Moon–Jupiter), so they are read as one support, not several.
+ * The set is the rated combination's planets; Chandra yogas (Gajakesari, Adhi,
+ * Sunapha, …) are formed from the Moon, so the Moon is always in their set.
+ * Nabhasa (whole-chart pattern) yogas are left out.
+ */
+export function sharedLinks(present: YogaItem[]): SharedLink[] {
+  const groups = new Map<string, SharedLink>();
+  for (const y of present) {
+    if (y.nabhasa) continue;
+    const base = y.rating.basis ?? y.participants;
+    const withMoon = [...new Set([...base, ...(y.category === "Chandra yoga" ? ["Moon"] : [])])];
+    const planets = withMoon.filter((p) => p !== "Rahu" && p !== "Ketu").sort();
+    if (planets.length < 2) continue;
+    const key = planets.join("+");
+    const g = groups.get(key) ?? { planets, yogas: [] };
+    g.yogas.push(y.name);
+    groups.set(key, g);
+  }
+  return [...groups.values()].filter((g) => g.yogas.length > 1);
+}
+
 /** Present yogas (grouped) plus the checklist yogas that are not formed. */
 export function yogaChecklist(chart: Chart, asOf: string) {
   const present = groupYogas(chart, asOf);

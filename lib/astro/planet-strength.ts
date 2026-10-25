@@ -1,11 +1,13 @@
 // Grahavani's composite planet strength. Baladi avastha is only a small input;
 // the main factors are dignity (with the compound relationship), house, D9
 // dignity and Vargottama, combustion, retrogression and, for the Moon, paksha
-// (Sun–Moon elongation). Partial Shadbala components (Uccha, Dig, Moon's
-// Paksha) are computed for display and for the AI; this is NOT full Shadbala.
+// (Sun–Moon elongation) and Dig bala at its extremes (±0.5). Partial Shadbala
+// components (Uccha, Dig, Moon's Paksha) are computed for display and for the
+// AI; this is NOT full Shadbala.
 import type { Chart, Graha } from "../kundlit-schemas";
 import { EXALTATION_POINT, SIGN_LORD, dignityOf, dignityText, isPlanet, type Dignity, type Planet } from "./relations";
 import { neechaBhanga } from "./rules";
+import { tempSigns } from "./varga";
 
 export type StrengthLevel = "strong" | "moderate" | "weak";
 export type Factor = { label: string; points: number };
@@ -17,13 +19,26 @@ export type PlanetStrength = {
   d9Dignity: Dignity | null;
   vargottama: boolean;
   factors: Factor[];
+  /** Within 0.25 of a level threshold: a small change in one factor would change the level. */
+  borderline: string | null;
   /** Partial Shadbala components in virupas (0–60 each). */
   shadbala: { uccha: number | null; dig: number | null; paksha: number | null };
 };
 
 export const STRENGTH_THRESHOLDS = { strong: 3, moderate: 0.5 };
+// Scores are sums of short decimals; compare with a tolerance so 3.0 is never 2.9999.
+const EPS = 1e-6;
 export const levelOf = (score: number): StrengthLevel =>
-  score >= STRENGTH_THRESHOLDS.strong ? "strong" : score >= STRENGTH_THRESHOLDS.moderate ? "moderate" : "weak";
+  score >= STRENGTH_THRESHOLDS.strong - EPS ? "strong" : score >= STRENGTH_THRESHOLDS.moderate - EPS ? "moderate" : "weak";
+export const BORDERLINE_MARGIN = 0.25;
+
+/** "borderline: 3 is the Strong threshold" when the score is within 0.25 of a threshold, else null. */
+export function borderlineOf(score: number): string | null {
+  for (const [level, t] of [["Strong", STRENGTH_THRESHOLDS.strong], ["Moderate", STRENGTH_THRESHOLDS.moderate]] as const) {
+    if (Math.abs(score - t) <= BORDERLINE_MARGIN + EPS) return `borderline: score ${score} is within ${BORDERLINE_MARGIN} of the ${level} threshold (${t})`;
+  }
+  return null;
+}
 
 const DIGNITY_POINTS: Record<string, number> = {
   exalted: 3,
@@ -57,6 +72,7 @@ const angle = (a: number, b: number) => {
   return d > 180 ? 360 - d : d;
 };
 const round1 = (n: number) => Math.round(n * 10) / 10;
+const round2 = (n: number) => Math.round(n * 100) / 100;
 
 /** Sun–Moon elongation 0–360° (waxing below 180). */
 export function moonElongation(chart: Chart): number | null {
@@ -77,8 +93,8 @@ function digPoint(p: Planet, lagnaLong: number): number {
 export function planetStrength(g: Graha, chart: Chart, cache = new Map<string, PlanetStrength>()): PlanetStrength {
   const hit = cache.get(g.name);
   if (hit) return hit;
-  const signs = Object.fromEntries(chart.grahas.map((x) => [x.name, x.sign_num]));
-  const d9Signs = Object.fromEntries(chart.grahas.map((x) => [x.name, x.navamsha.sign_num]));
+  const signs = tempSigns(chart, "d1");
+  const d9Temp = tempSigns(chart, "d9");
   const factors: Factor[] = [];
   let result: PlanetStrength;
 
@@ -94,19 +110,19 @@ export function planetStrength(g: Graha, chart: Chart, cache = new Map<string, P
       const avg = conj.reduce((s, x) => s + planetStrength(x, chart, cache).score, 0) / conj.length;
       factors.push({ label: `with ${conj.map((x) => x.name).join(", ")}`, points: round1(avg / 2) });
     }
-    const score = round1(factors.reduce((s, f) => s + f.points, 0));
-    result = { name: g.name, score, level: levelOf(score), dignity: null, d9Dignity: null, vargottama: g.vargottama, factors, shadbala: { uccha: null, dig: null, paksha: null } };
+    const score = round2(factors.reduce((s, f) => s + f.points, 0));
+    result = { name: g.name, score, level: levelOf(score), borderline: borderlineOf(score), dignity: null, d9Dignity: null, vargottama: g.vargottama, factors, shadbala: { uccha: null, dig: null, paksha: null } };
   } else {
     const p = g.name;
-    const dignity = dignityOf(p, g.sign_num, signs, g.dignity);
+    const dignity = dignityOf(p, g.sign_num, signs, g.deg_in_sign);
     factors.push({ label: dignityText(dignity), points: DIGNITY_POINTS[dignity.label] ?? 0 });
     if (dignity.label === "debilitated") {
       const nb = neechaBhanga(chart).find((n) => n.planet === p);
-      if (nb?.state === "formed") factors.push({ label: `Neecha Bhanga (${nb.rules.length} cancelling condition${nb.rules.length > 1 ? "s" : ""})`, points: 1.5 });
+      if (nb?.state === "formed") factors.push({ label: `Neecha Bhanga (${nb.countText})`, points: 1.5 });
     }
     factors.push(housePoints(p, g.house));
     if (g.combust && p !== "Sun") factors.push({ label: "combust", points: -1.5 });
-    const d9Dignity = dignityOf(p, g.navamsha.sign_num, d9Signs);
+    const d9Dignity = dignityOf(p, g.navamsha.sign_num, d9Temp);
     if (g.vargottama) factors.push({ label: "Vargottama", points: 1 });
     const d9p = D9_POINTS[d9Dignity.label] ?? 0;
     if (d9p !== 0) factors.push({ label: `D9 ${g.navamsha.sign}: ${dignityText(d9Dignity)}`, points: d9p });
@@ -122,11 +138,12 @@ export function planetStrength(g: Graha, chart: Chart, cache = new Map<string, P
     else if (dig <= 15) factors.push({ label: `dig bala ${Math.round(dig)}/60`, points: -0.5 });
     if (g.avastha) factors.push({ label: `${g.avastha} avastha (minor factor)`, points: AVASTHA_POINTS[g.avastha] ?? 0 });
 
-    const score = round1(factors.reduce((s, f) => s + f.points, 0));
+    const score = round2(factors.reduce((s, f) => s + f.points, 0));
     result = {
       name: p,
       score,
       level: levelOf(score),
+      borderline: borderlineOf(score),
       dignity,
       d9Dignity,
       vargottama: g.vargottama,

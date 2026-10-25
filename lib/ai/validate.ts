@@ -85,6 +85,14 @@ const NOT_COVERED_RE = /\b(not|isn['’]t|no|never|doesn['’]t|different|separa
 // Absolute or deterministic negative phrasing (item 11 of the Oct 2026 review).
 const DETERMINISTIC_RE = /\b(very little results?|marked difficult(?:y|ies)|will (?:never|certainly|definitely)\b[^.]*|is (?:certain|guaranteed|bound) to|no chance of)\b/i;
 
+// Method / pipeline wording belongs in the page footnotes, not in the reading.
+const META_RE = /\b(not computed|(?:explicitly )?not counted|recorded as|rating basis|the data shows)\b/i;
+const META_CASED_RE = /\bFACTS\b/;
+
+// A qualitative Dig bala / directional strength claim ("low directional strength").
+const DIG_CLAIM_RE = /\b(?:(?:low|weak|poor|little|high|strong|good|full)\s+(?:directional strength|dig\s*bala)|(?:directional strength|dig\s*bala)\s+(?:is\s+|of\s+)?(?:low|weak|poor|high|strong|good|full))\b/i;
+const GRAHA_NAME_RE = new RegExp(`\\b(${GRAHA_RE})\\b`, "gi");
+
 // Every Yoga / Dosha name the app knows, so naming an unrated one (e.g. "Neechabhanga
 // Raj Yoga" in a chart that only has "Raj Yoga") counts as its own item.
 const KNOWN_ITEM_NAMES = [...YOGA_CHECKLIST.map((c) => c.label.en), ...Object.values(DOSHAS).map((d) => d.en), "Nadi Dosha", "Bhakoot Dosha"]
@@ -217,6 +225,17 @@ export function validateReading(output: unknown, ctx: ValidationContext): string
     // Never present a rating as Shadbala.
     if (SHADBALA_RE.test(sentence) && RATING_WORD_RE.test(sentence) && !NOT_COVERED_RE.test(sentence))
       problems.push(`"${sentence.slice(0, 80)}" presents a rating as Shadbala`);
+
+    // Methodology wording stays out of the reading (rule E8).
+    const meta = sentence.match(META_RE) ?? sentence.match(META_CASED_RE);
+    if (meta) problems.push(`"${meta[0]}" describes the method; keep methodology in the footnotes`);
+
+    // A Dig bala claim must be about a planet whose strength factors list it (rule E1).
+    if (ctx.digBalaFactor && DIG_CLAIM_RE.test(sentence)) {
+      const named = [...new Set([...sentence.matchAll(GRAHA_NAME_RE)].map((m) => grahaAlias.get(m[1].toLowerCase().replace(/\s+/g, " "))).filter(Boolean))];
+      if (named.length && !named.some((n) => ctx.digBalaFactor!.includes(n!)))
+        problems.push(`"${sentence.slice(0, 80)}" claims a Dig bala that is not among ${named.join(", ")}'s strength factors`);
+    }
 
     // No absolute negative verdicts (they need several strong factors, which the prompt asks to name).
     const absolute = sentence.match(DETERMINISTIC_RE);

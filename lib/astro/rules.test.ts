@@ -130,7 +130,7 @@ describe("Manglik (Grahavani)", () => {
       "Mars conjunct the Moon",
     ]);
     expect(b.severity).toBe("low");
-    expect(b.grahavani.steps.at(-1)).toBe("Total 0.5 → Low (≤ 0 cancelled, < 1 low, < 2 medium, else high)");
+    expect(b.grahavani.steps.at(-1)).toBe("Total +1 + 1 + 1 − 1 − 1 − 0.5 = 0.5 → Low (≤ 0 cancelled, < 1 low, < 2 medium, else high)");
   });
 
   it("formed but cancelled when the cancellations outweigh it", () => {

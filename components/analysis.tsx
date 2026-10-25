@@ -7,6 +7,7 @@ import { dateOnly } from "@/lib/format";
 import { functionalNature } from "@/lib/astro/functional";
 import { ownHouseLords } from "@/lib/astro/rules";
 import { atmakaraka, marriageFactors } from "@/lib/astro/marriage";
+import { marriageSignificators, marriageWindows } from "@/lib/astro/marriage-timing";
 import {
   birthTimeCheck,
   careerD10,
@@ -85,17 +86,19 @@ export function birthTimeNotes(chart: Chart): string[] {
   return birthTimeCheck(chart, rashi)?.notes ?? [];
 }
 
-export function MarriageCareerSection({ chart }: { chart: Chart }) {
+export function MarriageCareerSection({ chart, asOf }: { chart: Chart; asOf: string }) {
   const m = marriageFactors(chart);
   const d10 = careerD10(chart);
   const bt = birthTimeCheck(chart, rashi);
+  const sig = marriageSignificators(chart);
+  const windows = marriageWindows(chart, asOf);
   return (
     <Section title="Marriage and career factors (D9 / D10)">
       <h3 className="mb-2 text-sm font-bold">Marriage (D1 and Navamsa)</h3>
-      {bt?.warn && (
+      {bt && (bt.sensitive.d1 || bt.sensitive.d9) && (
         <p className="mb-2 rounded-lg bg-warn-bg px-3 py-2 text-xs text-warn">
-          {bt.notes.join(" ")} D9-based statements are sensitive to the exact
-          birth time.
+          {[...bt.notesBy.d1, ...bt.notesBy.d9].join(" ")} D9-based statements
+          are sensitive to the exact birth time.
         </p>
       )}
       <Rows
@@ -129,7 +132,48 @@ export function MarriageCareerSection({ chart }: { chart: Chart }) {
           <li key={c}>{c}</li>
         ))}
       </ul>
+      <h3 className="mb-1 mt-4 text-sm font-bold">
+        Traditional timing windows
+      </h3>
+      {windows.length ? (
+        <ul className="space-y-2 text-sm">
+          {windows.map((w) => (
+            <li key={w.start} className="rounded-xl bg-background px-3 py-2">
+              <span className="font-semibold">
+                {dateOnly(w.start)} – {dateOnly(w.end)}
+              </span>{" "}
+              · {w.period.split("–").map(graha).join("–")} (
+              {w.rank === "MD and AD"
+                ? "both Dasha lords are significators"
+                : "Antardasha lord is a significator"}
+              )
+              <span className="block text-xs text-muted">
+                {w.why.join("; ")}
+                {w.moonAlso ? "; also from the Moon" : ""}
+                {w.secondary.length ? `; also ${w.secondary.join(", ")}` : ""}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-sm text-muted">
+          No double transit falls in a significator&apos;s Antardasha over the
+          current and next Mahadasha.
+        </p>
+      )}
+      <p className="mt-1 text-xs text-muted">
+        A window is an Antardasha whose lord is a marriage significator (
+        {[...sig.primary.keys()].map(graha).join(", ")}) while Jupiter and
+        Saturn both occupy or aspect the same target from the Lagna: the 7th
+        house, or the sign the 7th lord occupies. Traditional indicators only.
+      </p>
       <h3 className="mb-2 mt-5 text-sm font-bold">Career (D10, Dashamsha)</h3>
+      {d10 && bt?.sensitive.d10 && (
+        <p className="mb-2 rounded-lg bg-warn-bg px-3 py-2 text-xs text-warn">
+          {bt.notesBy.d10.join(" ")} D10-based statements are sensitive to the
+          exact birth time.
+        </p>
+      )}
       {d10 ? (
         <>
           <Rows
@@ -214,13 +258,26 @@ export function DashaLords({
           </ul>
         </>
       )}
-      {tr.jupiterNow && (
-        <p className="mt-2 text-xs text-muted">
-          Jupiter is transiting {rashi(tr.jupiterNow.sign)} now,{" "}
-          {tr.jupiterNow.fromMoon} from the Moon (Kundlit gives Jupiter&apos;s
-          current sign only).
-        </p>
-      )}
+      <h3 className="mb-1 mt-3 text-sm font-bold">Jupiter transits</h3>
+      <p className="mb-1 text-xs text-muted">
+        Jupiter is in {rashi(tr.jupiterNow.sign)} now: house{" "}
+        {tr.jupiterNow.fromMoon} from the Moon, {tr.jupiterNow.fromLagna} from
+        the Lagna. Classically favourable from the Moon: 2, 5, 7, 9, 11.
+      </p>
+      <ul className="space-y-0.5 text-xs">
+        {tr.jupiter.slice(0, 12).map((j) => (
+          <li key={j.from}>
+            {rashi(j.sign)}, {dateOnly(j.from)} – {dateOnly(j.to)} · house{" "}
+            {j.fromMoon} from the Moon{j.favourable ? " (favourable)" : ""},{" "}
+            {j.fromLagna} from the Lagna · overlaps{" "}
+            {j.periods.map((p) => p.split("–").map(graha).join("–")).join(", ")}
+          </li>
+        ))}
+      </ul>
+      <p className="mt-1 text-xs text-muted">
+        Saturn and Jupiter positions computed by Grahavani (Lahiri), including
+        retrograde returns.
+      </p>
     </div>
   );
 }

@@ -13,17 +13,18 @@ const ratings = (part: string) => {
 };
 
 describe("yoga ratings match the calibration on all fixtures", () => {
-  // Composite strength of the forming planets (lib/astro/planet-strength.ts).
+  // Average of the forming planets' levels, rounded down (Oct 2026 round 2). Dhana
+  // now needs a 2nd or 11th lord, so 1st–9th-only links (Bengaluru, 2014) are gone.
   it.each([
     // Neecha Bhanga itself is not rated (null); its Raja Yoga is.
     // Partial Adhi with one benefic is rated Weak (a mild effect).
     ["mumbai", { raja: "S", neecha_bhanga: null, neechabhanga: "W", adhi: "W", ubhayachari: "M" }],
     ["raipur", { ruchaka: "M", raja: "M", dhana: "W", adhi: "W", vasi: "W" }],
-    ["bengaluru", { ruchaka: "S", malavya: "S", raja: "M", dhana: "M", harsha: "W", adhi: "W", yogakaraka_kendra: "S", chandra_mangala: "M", vasi: "M" }],
-    ["1999-04-12", { hamsa: "M", raja: "M", dhana: "W", neecha_bhanga: null, neechabhanga: "M", vimala: "W", sunaphaa: "M", vesi: "W" }],
-    ["2014-12-15", { ruchaka: "M", hamsa: "M", raja: "S", dhana: "S", vimala: "W", yogakaraka_kendra: "S", vesi: "W" }],
-    ["2018-06-25", { bhadra: "S", raja: "S", dhana: "S", neecha_bhanga: null, neechabhanga: "W", harsha: "M", adhi: "W", durdhura: "S", vesi: "W" }],
-    ["2021-06-15", { sasa: "M", gajakesari: "M", raja: "M", dhana: "M", neecha_bhanga: null, neechabhanga: "M", sarala: "W", adhi: "W", anaphaa: "W", ubhayachari: "M" }],
+    ["bengaluru", { ruchaka: "S", malavya: "S", raja: "M", harsha: "W", adhi: "W", yogakaraka_kendra: "S", chandra_mangala: "M", vasi: "M" }],
+    ["1999-04-12", { hamsa: "M", raja: "M", dhana: "W", neecha_bhanga: null, neechabhanga: "M", vimala: "M", sunaphaa: "M", vesi: "W" }],
+    ["2014-12-15", { ruchaka: "M", hamsa: "M", raja: "S", vimala: "W", yogakaraka_kendra: "S", vesi: "W" }],
+    ["2018-06-25", { bhadra: "S", raja: "S", dhana: "W", neecha_bhanga: null, neechabhanga: "W", harsha: "M", adhi: "W", durdhura: "S", vesi: "W" }],
+    ["2021-06-15", { sasa: "M", gajakesari: "M", raja: "M", dhana: "M", neecha_bhanga: null, neechabhanga: "W", sarala: "W", adhi: "W", anaphaa: "W", ubhayachari: "M" }],
   ])("%s", (part, expected) => {
     expect(ratings(part)).toEqual(expected);
   });
@@ -43,6 +44,30 @@ describe("yoga rating rules", () => {
 
   it("reasons name each planet's strength and main factors", () => {
     expect(by("yoga.raja").rating.reasons.join(" | ")).toMatch(/Shukra: strong — .*combust/);
+  });
+
+  it("2-planet yogas: the average of the two levels, rounded down", () => {
+    // Synthetic strengths, so every pair is covered regardless of the fixtures.
+    const lvl = { strong: { score: 4, level: "strong" }, moderate: { score: 1, level: "moderate" }, weak: { score: -1, level: "weak" } } as const;
+    const rate = (a: keyof typeof lvl, b: keyof typeof lvl, status: "present" | "cancelled" = "present") => {
+      const m = new Map([
+        ["Mars", { name: "Mars", factors: [], borderline: null, ...lvl[a] }],
+        ["Venus", { name: "Venus", factors: [], borderline: null, ...lvl[b] }],
+      ]) as unknown as Parameters<typeof rateYoga>[2];
+      return rateYoga({ key: "yoga.test", nabhasa: false, status, combinations: [{ participants: ["Mars", "Venus"] }] }, raipur, m).level;
+    };
+    expect([rate("strong", "strong"), rate("strong", "moderate"), rate("strong", "weak")]).toEqual(["Strong", "Moderate", "Moderate"]);
+    expect([rate("moderate", "moderate"), rate("moderate", "weak"), rate("weak", "weak")]).toEqual(["Moderate", "Weak", "Weak"]);
+    expect(rate("strong", "strong", "cancelled")).toBe("Moderate"); // a Bhanga lowers one level
+  });
+
+  it("3 planets: Strong + Strong + Weak averages 1.33, rounded down to Moderate", () => {
+    const m = new Map(
+      (["Mars", "Venus", "Jupiter"] as const).map((n, i) => [n, { name: n, factors: [], borderline: null, score: i < 2 ? 4 : -1, level: i < 2 ? "strong" : "weak" }]),
+    ) as unknown as Parameters<typeof rateYoga>[2];
+    const r = rateYoga({ key: "yoga.test", nabhasa: false, status: "present", combinations: [{ participants: ["Mars", "Venus", "Jupiter"] }] }, raipur, m);
+    expect(r.level).toBe("Moderate");
+    expect(r.reasons.join()).toMatch(/average 1\.33, rounded down → Moderate/);
   });
 
   it("a weak planet caps the yoga and the reason says so", () => {

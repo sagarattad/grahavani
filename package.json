@@ -21,6 +21,7 @@
     "@prisma/client": "^7.10.1",
     "@react-pdf/renderer": "^4.9.0",
     "ai": "^7.0.148",
+    "astronomy-engine": "2.1.19",
     "dotenv": "^18.0.8",
     "next": "16.4.2",
     "next-auth": "^5.0.0-beta.32",

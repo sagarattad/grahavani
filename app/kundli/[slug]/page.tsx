@@ -60,7 +60,7 @@ async function KundliView({ params }: { params: Promise<{ slug: string }> }) {
           <DoshasLoader chartRow={chartRow.row} />
         </Suspense>
       </AboutProvider>
-      <MarriageCareerSection chart={chart} />
+      <MarriageCareerSection chart={chart} asOf={dasha.as_of} />
       <DashaSection chart={chart} current={dasha} />
       <ReadingPanel kind="kundli" slug={slug} />
       <FollowupBox kind="kundli" slug={slug} />

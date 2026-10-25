@@ -88,7 +88,15 @@ export function computeManglik(chart: Chart): ManglikResult {
   }
   score = Math.round(score * 100) / 100;
   const intensity: ManglikIntensity = !formed ? "none" : score <= 0 ? "cancelled" : score < 1 ? "low" : score < 2 ? "medium" : "high";
-  if (formed) steps.push(`Total ${score} → ${INTENSITY_LABEL[intensity]} (≤ 0 cancelled, < 1 low, < 2 medium, else high)`);
+  if (formed) {
+    // Signed sum of every term, e.g. "+1 + 0.5 − 1 − 0.25 = 0.25".
+    const terms = [
+      ...refs.filter((r) => r.north || r.southOnly).map((r) => (r.north ? 1 : 0.5)),
+      ...cancellations.filter((c) => c.applies && c.weight).map((c) => -c.weight),
+    ];
+    const sum = terms.map((v, i) => (i === 0 ? `${v < 0 ? "−" : "+"}${Math.abs(v)}` : `${v < 0 ? "−" : "+"} ${Math.abs(v)}`)).join(" ");
+    steps.push(`Total ${sum} = ${score} → ${INTENSITY_LABEL[intensity]} (≤ 0 cancelled, < 1 low, < 2 medium, else high)`);
+  }
 
   const north = refs.some((r) => r.north);
   return {

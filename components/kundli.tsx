@@ -4,9 +4,9 @@ import { Chip, Note, Section, Term } from "./ui";
 import { PlaceEdit } from "./PlaceEdit";
 import { d1Houses, d9Houses } from "@/lib/chart/northIndian";
 import { graha, grahaWithMeaning, nakshatra, rashi } from "@/lib/glossary";
-import { birthDateTime, dateOnly, dms, ymd } from "@/lib/format";
+import { birthDateTime, dashaBalanceText, dateOnly, dms } from "@/lib/format";
 import { antardashas, contains } from "@/lib/dasha";
-import { yogaChecklist } from "@/lib/yogas";
+import { sharedLinks, yogaChecklist } from "@/lib/yogas";
 import { WindowList } from "./periods";
 import { AboutToggle } from "./About";
 import { RatingLine } from "./rating";
@@ -157,6 +157,7 @@ export function PlanetTable({ chart }: { chart: Chart }) {
                 </td>
                 <td className="py-2 pr-2 text-xs" title={s.factors.map((f) => `${f.label} ${f.points > 0 ? "+" : ""}${f.points}`).join("; ")}>
                   <span className={`font-semibold ${s.level === "strong" ? "text-good" : s.level === "weak" ? "text-bad" : "text-warn"}`}>{s.level}</span>
+                  {s.borderline && <span className="block text-warn" title={s.borderline}>borderline ({s.score})</span>}
                   {s.shadbala.uccha !== null && (
                     <span className="block text-muted">
                       U {Math.round(s.shadbala.uccha)} · D {Math.round(s.shadbala.dig!)}
@@ -233,8 +234,9 @@ export function DashaSection({ chart, current }: { chart: Chart; current: DashaC
       </ul>
       <DashaLords chart={chart} current={current} />
       <p className="mb-4 text-xs text-muted">
-        Dasha balance at birth: {graha(chart.vimshottari.birth.mahadasha.lord)} Mahadasha, {ymd(chart.vimshottari.birth.mahadasha.balance_ymd)}.
-        As of {dateOnly(current.as_of)}. All dates in IST.
+        Dasha balance at birth: {graha(chart.vimshottari.birth.mahadasha.lord)} Mahadasha,{" "}
+        {dashaBalanceText(chart.vimshottari.timeline[0].start, chart.vimshottari.timeline[0])}. Dasha periods as of {dateOnly(current.as_of)}; the running
+        periods stay current until {dateOnly(current.pratyantardasha.end)}. All dates in IST.
       </p>
       <h3 className="mb-2 text-sm font-bold">Mahadasha timeline</h3>
       <p className="mb-2 text-xs text-muted">Tap a Mahadasha to see its Antardashas.</p>
@@ -282,9 +284,15 @@ export function DashaSection({ chart, current }: { chart: Chart; current: DashaC
 
 export function YogasSection({ chart, asOf }: { chart: Chart; asOf: string }) {
   const { present, absent } = yogaChecklist(chart, asOf);
+  const shared = sharedLinks(present);
   return (
     <Section title={<Term id="yoga" full />}>
       {present.length === 0 && <p className="text-sm text-muted">No yogas were reported for this chart.</p>}
+      {shared.map((l) => (
+        <p key={l.planets.join("+")} className="mb-3 rounded-lg bg-warn-bg px-3 py-2 text-xs text-warn">
+          {l.yogas.join(", ")} rest on the same {l.planets.map(graha).join("–")} link: read them as one support, not as separate strengths.
+        </p>
+      ))}
       <ul className="space-y-3">
         {present.map((y) => (
           <li key={y.key} className="rounded-xl border border-border p-3 text-sm">

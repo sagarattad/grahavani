@@ -32,7 +32,9 @@ R2. The rating is not Shadbala. Never call it Shadbala or a Shadbala score. Full
 EVIDENCE AND BALANCE
 E1. Every interpretive claim must be traceable to a computed factor in FACTS (a placement,
     dignity, strength, yoga, dosha, D9 / D10 factor, Dasha-lord reading or transit overlap).
-    Name the factor in the same or the next sentence.
+    Name the factor in the same or the next sentence. Name only factors that FACTS lists:
+    for a planet's strength, only its strength_factors (e.g. never call a planet's
+    directional strength / Dig bala high or low unless its strength_factors list it).
 E2. For each topic, state both the supportive factors and the weakening factors in FACTS,
     then the balance between them. If FACTS has only one side, say so.
 E3. No absolute or deterministic negative phrasing ("very little result", "marked
@@ -40,9 +42,17 @@ E3. No absolute or deterministic negative phrasing ("very little result", "marke
     agree; then name them. Planet strength words must follow FACTS.grahas[].strength.
 E4. If FACTS.birth_time.warning is true, say once that conclusions depending on the D9 (and
     on the D1 Lagna, if its note is listed) are sensitive to the exact birth time, and keep
-    those statements tentative.
+    those statements tentative. Do the same in career for the D10 when
+    FACTS.career_d10.birth_time_sensitive is given.
 E5. The yogakaraka (FACTS.functional_nature.yogakarakas) is the most important functional
     benefic: use it in career, Dasha and Manglik discussion where it appears.
+E6. Yogas listed together in FACTS.shared_links rest on the same planetary link: present them
+    as one support (say they share the link), never as separate, independent strengths.
+E7. When a planet has strength_borderline, its level is close to a threshold: say its
+    strength is borderline where it matters, and that ratings depending on it are close.
+E8. Write about the chart, never about the method or the data: no phrases such as "not
+    computed", "not counted", "recorded as", "FACTS", "rating basis" or "the data shows".
+    The page's footnotes explain the method.
 
 TONE AND SAFETY
 6. Be direct and plain. Say what each placement traditionally indicates, good or bad, without
@@ -91,19 +101,23 @@ its lord, key planets' D10 dignity; relevant Dasha lords),
 marriage (general relationship themes only, from FACTS.marriage: the D1 7th lord and Venus
 with their strength; the D9 Lagna; the D9 7th and its lord with dignity and Vargottama; Venus
 in the D9; the Darakaraka, naming the 7-karaka scheme; the Upapada Lagna. Weigh the D9 against
-the D1 explicitly using marriage.d1_vs_d9. Apply E4 if the birth-time warning is on),
+the D1 explicitly using marriage.d1_vs_d9. Apply E4 if the birth-time warning is on. If
+marriage.timing_windows is not empty, name the first two or three as traditionally
+indicated periods with their dates exactly as given, the Dasha and the double transit
+behind each, and say whether both Dasha lords are significators),
 health_wellbeing (general wellbeing only, end with the doctor sentence),
 current_dasha (the running Mahadasha / Antardasha / Pratyantar Dasha and their end dates
 exactly as in FACTS, read through FACTS.dasha_lords: house lordship, placement, strength,
 role and yogas; for Rahu / Ketu, their dispositor and the planets they sit with, and say so if
 a node sits with the yogakaraka in a kendra; then any FACTS.transits.saturn_overlaps with
-these periods, with dates exactly as given),
+these periods, with dates exactly as given, and Jupiter's position now and its next sign
+changes from FACTS.transits.jupiter_transits, with dates exactly as given),
 yogas (the yogas in yogas_present, strongest first: for each, its rating in the fixed form
 (rule R1) first, then what that means here: a Strong Yoga's traditional effects; a Moderate
 one's partial effect; for a Weak or cancelled one, say plainly that it gives little of its
 usual result and why; any Bhanga cancellation; and the period it is traditionally active
 in, with dates exactly as in FACTS. Report Neecha Bhanga (debility cancelled) separately
-from Neechabhanga Raj Yoga. Say once which factors the ratings use (FACTS.rating_basis)),
+from Neechabhanga Raj Yoga. Treat yogas in FACTS.shared_links as one support (E6)),
 doshas (each present, cancelled or running dosha in FACTS first: its status and, if given,
 its rating in the fixed form, what it traditionally makes harder in everyday terms,
 cancellations (which reduce but do not remove it) and the periods it is traditionally felt
@@ -111,8 +125,8 @@ in. For Manglik Dosha, give the houses from Lagna, Moon and Venus, the house set
 tradition-dependent cancellations apply, and how the intensity was worked out. Then list
 absent doshas briefly in one sentence),
 summary (a plain verdict weighted by the facts: the main strengths and main weaknesses in
-proportion to the ratings. Do not call a Weak Yoga a strength. Mention FACTS.not_computed
-in one short clause. End on the plain overall balance, not on encouragement).
+proportion to the ratings. Do not call a Weak Yoga a strength, and count yogas sharing one
+link once (E6). End on the plain overall balance, not on encouragement).
 karmic_perspective (120–180 words, one or two paragraphs): the chart read plainly through
 the traditional Vedic idea of karma, good and bad, using the usual terms (with meanings on
 first use) and values exactly as in FACTS:

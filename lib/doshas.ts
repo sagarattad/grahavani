@@ -1,12 +1,14 @@
 // One card per dosha. Manglik and Kemadruma use Grahavani's own rules
-// (lib/astro); Kaal Sarp, Sade Sati and Dhaiya come from Kundlit. Missing data
+// (lib/astro); Sade Sati and Dhaiya use locally computed Saturn transits
+// (lib/astro/transits.ts); Kaal Sarp comes from Kundlit. Missing data
 // (e.g. a Kaal Sarp call that failed, or a chart saved before transit data was
 // kept) becomes "unavailable" instead of breaking the page.
-import { DOSHAS, SADE_SATI_PHASES } from "./glossary";
+import { DOSHAS } from "./glossary";
 import { dateOnly } from "./format";
 import { activationWindows, type Window } from "./dasha";
 import { computeManglik, INTENSITY_LABEL } from "./astro/manglik";
 import { kemadruma, ord } from "./astro/rules";
+import { dhaiyaRanges, sadeSatiRanges } from "./astro/transits";
 import type { Chart, KaalSarp, Manglik } from "./kundlit-schemas";
 import { rateDhaiya, rateKaalSarp, rateKemadruma, rateManglik, rateSadeSati, type DoshaLevel, type Rating } from "./strength";
 
@@ -24,8 +26,6 @@ export type DoshaCard = {
   asOf?: string;
   /** Grahavani's classical intensity (lib/strength.ts); level null when not present. */
   rating: Rating<DoshaLevel>;
-  /** Transit cards: Kundlit only lists periods that end before this instant. */
-  coveredUntil?: string;
 };
 
 const NOT_RATED: Rating<DoshaLevel> = { level: null, label: "Not rated", reasons: [] };
@@ -45,10 +45,6 @@ const unavailable = (key: keyof typeof DOSHAS) =>
   card(key, { status: "unavailable", statusLabel: "Not available", details: [], windows: [], ranges: [] });
 
 const t = (s: string) => new Date(s).getTime();
-const YEAR_MS = 365.25 * 86400_000;
-/** End of Kundlit's transit window (default 10 years after as_of). */
-const coveredUntil = (asOf: string, years: number | null | undefined) => new Date(t(asOf) + (years ?? 10) * YEAR_MS).toISOString();
-const inRange = (start: string, end: string, now: number) => t(start) <= now && now < t(end);
 
 /**
  * Grahavani's own Manglik (lib/astro/manglik.ts), computed from the chart:
@@ -75,7 +71,8 @@ export function manglikCard(chart: Chart, asOf: string): DoshaCard {
             `Intensity: ${g.steps.join("; ")}`,
           ]),
     ],
-    windows: status !== "absent" ? activationWindows(["Mars"], chart.vimshottari.timeline, asOf, 3) : [],
+    // A cancelled dosha has no "felt in" periods.
+    windows: status === "present" ? activationWindows(["Mars"], chart.vimshottari.timeline, asOf, 3) : [],
     ranges: [],
     rating: rateManglik(m),
   });
@@ -101,72 +98,39 @@ export function kemadrumaCard(chart: Chart, asOf: string): DoshaCard {
     status,
     statusLabel: status === "absent" ? "Not formed" : status === "cancelled" ? "Formed but cancelled" : "Formed",
     details: status === "absent" ? [`Not formed: ${k.why}`] : [`Formed: ${k.why}`, ...k.cancellations.map((c) => `Cancellation: ${c}`)],
-    windows: status !== "absent" ? activationWindows(["Moon"], chart.vimshottari.timeline, asOf, 3) : [],
+    windows: status === "present" ? activationWindows(["Moon"], chart.vimshottari.timeline, asOf, 3) : [],
     ranges: [],
     rating: rateKemadruma(status !== "absent", k.cancellations),
   });
 }
 
-export function sadeSatiCard(chart: Chart): DoshaCard {
-  const tr = chart.transit;
-  if (!tr) return unavailable("sadeSati");
-  const now = t(tr.as_of);
-  const until = coveredUntil(tr.as_of, tr.sade_sati_lifecycle.horizon_years);
-  const ranges: DateRange[] = tr.sade_sati_lifecycle.occurrences.flatMap((o) =>
-    (
-      [
-        ["Rising", o.rising_start, o.rising_end],
-        ["Peak", o.peak_start, o.peak_end],
-        ["Setting", o.setting_start, o.setting_end],
-      ] as const
-    )
-      .filter(([, s, e]) => s && e && t(e!) > now)
-      .map(([label, s, e]) => ({ label, start: s!, end: e!, current: inRange(s!, e!, now) })),
-  );
-  const status = tr.sade_sati.active ? "running" : ranges.length ? "upcoming" : "none";
+/** Sade Sati from Saturn's locally computed transits (lib/astro/transits.ts), over the current and next Mahadasha. */
+export function sadeSatiCard(chart: Chart, asOf: string): DoshaCard {
+  const ranges = sadeSatiRanges(chart, asOf);
+  const running = ranges.find((r) => r.current);
+  const status = running ? "running" : ranges.length ? "upcoming" : "none";
   return card("sadeSati", {
     status,
-    statusLabel:
-      status === "running"
-        ? `Running now — ${SADE_SATI_PHASES[tr.sade_sati.phase] ?? tr.sade_sati.phase}`
-        : status === "upcoming"
-          ? "Not running now — upcoming"
-          : `Not running — none listed that ends before ${dateOnly(until)}`,
+    statusLabel: running ? `Running now — ${running.label}` : status === "upcoming" ? `Not running now — next from ${dateOnly(ranges[0].start)}` : "Not running",
     details: [],
     windows: [],
     ranges,
-    asOf: tr.as_of,
-    coveredUntil: until,
-    rating: rateSadeSati(status === "running" ? (ranges.find((r) => r.current)?.label ?? "Rising") : null),
+    asOf,
+    rating: rateSadeSati(running?.label ?? null),
   });
 }
 
-export function dhaiyaCard(chart: Chart): DoshaCard {
-  const tr = chart.transit;
-  if (!tr) return unavailable("dhaiya");
-  const now = t(tr.as_of);
-  const until = coveredUntil(tr.as_of, tr.dhaiya_lifecycle.horizon_years);
-  const ranges: DateRange[] = [
-    ...tr.dhaiya_lifecycle.kantaka_occurrences.map((r) => ({ label: "Kantaka (4th from Chandra)", ...r })),
-    ...tr.dhaiya_lifecycle.ardha_ashtama_occurrences.map((r) => ({ label: "Ardhashtama (8th from Chandra)", ...r })),
-  ]
-    .filter((r) => t(r.end_dt) > now)
-    .map((r) => ({ label: r.label, start: r.start_dt, end: r.end_dt, current: inRange(r.start_dt, r.end_dt, now) }))
-    .sort((a, b) => t(a.start) - t(b.start));
+/** Shani Dhaiya (Kantaka and Ardhashtama) from Saturn's locally computed transits. */
+export function dhaiyaCard(chart: Chart, asOf: string): DoshaCard {
+  const ranges = dhaiyaRanges(chart, asOf);
   const status = ranges.some((r) => r.current) ? "running" : ranges.length ? "upcoming" : "none";
   return card("dhaiya", {
     status,
-    statusLabel:
-      status === "running"
-        ? "Running now"
-        : status === "upcoming"
-          ? "Not running now — upcoming"
-          : `Not running — none listed that ends before ${dateOnly(until)}`,
+    statusLabel: status === "running" ? "Running now" : status === "upcoming" ? `Not running now — next from ${dateOnly(ranges[0].start)}` : "Not running",
     details: [],
     windows: [],
     ranges,
-    asOf: tr.as_of,
-    coveredUntil: until,
+    asOf,
     rating: rateDhaiya(status === "running"),
   });
 }
@@ -182,7 +146,7 @@ export function buildDoshas(opts: {
     manglikCard(chart, asOf),
     kaalSarpCard(opts.kaalSarp, chart, asOf),
     kemadrumaCard(chart, asOf),
-    sadeSatiCard(chart),
-    dhaiyaCard(chart),
+    sadeSatiCard(chart, asOf),
+    dhaiyaCard(chart, asOf),
   ];
 }

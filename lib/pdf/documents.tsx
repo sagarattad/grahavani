@@ -13,10 +13,10 @@ import {
   severity,
   verdict,
 } from "../glossary";
-import { birthDateTime, dateOnly, dms, points, ymd } from "../format";
+import { birthDateTime, dashaBalanceText, dateOnly, dms, points } from "../format";
 import { nearNakshatraBoundary, nearSignBoundary } from "../accuracy";
 import { MANGLIK_CHECKS, comparedText, doshaState, manglikCombined, manglikStatus, sortKoots } from "../summaries";
-import { yogaChecklist } from "../yogas";
+import { sharedLinks, yogaChecklist } from "../yogas";
 import { windowText } from "../periods";
 import type { DoshaCard } from "../doshas";
 import { ABOUT_DOSHA_STATUSES, type AboutTexts } from "../ai/about";
@@ -26,6 +26,7 @@ import { dignityText } from "../astro/relations";
 import { functionalNature } from "../astro/functional";
 import { ownHouseLords } from "../astro/rules";
 import { atmakaraka, marriageFactors } from "../astro/marriage";
+import { marriageWindows } from "../astro/marriage-timing";
 import { birthTimeCheck, careerD10, transitOverlaps } from "../astro/timing-checks";
 import { readDashaLord } from "../astro/dasha-lords";
 import { groupYogas } from "../yogas";
@@ -119,7 +120,7 @@ export function KundliPdf({ person, chart, dasha, doshas, about, attribution, re
                 g.retrograde ? "R" : "",
                 g.combust ? "C" : "",
                 `${rashi(g.navamsha.sign_num)}${st.d9Dignity ? ` · ${st.d9Dignity.label}` : ""}${g.vargottama ? " · Vargottama" : ""}`,
-                st.level,
+                st.borderline ? `${st.level} (borderline)` : st.level,
                 g.avastha ?? "-",
               ];
             }),
@@ -154,7 +155,7 @@ export function KundliPdf({ person, chart, dasha, doshas, about, attribution, re
 
       <PdfYogas chart={chart} asOf={dasha.as_of} about={about} />
       <PdfDoshas title="Doshas" cards={doshas} about={about} />
-      <PdfMarriageCareer chart={chart} />
+      <PdfMarriageCareer chart={chart} asOf={dasha.as_of} />
 
       <Section title="Vimshottari Dasha (120-year period system)">
         <Text style={s.h3}>Running now</Text>
@@ -184,9 +185,21 @@ export function KundliPdf({ person, chart, dasha, doshas, about, attribution, re
             ))}
           </>
         )}
+        <Text style={s.h3}>Jupiter transits</Text>
+        <Text style={s.small}>
+          Jupiter is in {rashi(transits.jupiterNow.sign)} now: house {transits.jupiterNow.fromMoon} from the Moon, {transits.jupiterNow.fromLagna} from the Lagna. Classically
+          favourable from the Moon: 2, 5, 7, 9, 11.
+        </Text>
+        {transits.jupiter.slice(0, 12).map((j) => (
+          <Text key={j.from} style={s.small}>
+            {rashi(j.sign)}, {dateOnly(j.from)} – {dateOnly(j.to)} · house {j.fromMoon} from the Moon{j.favourable ? " (favourable)" : ""}, {j.fromLagna} from the Lagna · overlaps{" "}
+            {j.periods.map((p) => p.split("–").map(graha).join("–")).join(", ")}
+          </Text>
+        ))}
         <Text style={[s.small, { marginTop: 3 }]}>
-          Dasha balance at birth: {graha(chart.vimshottari.birth.mahadasha.lord)} Mahadasha, {ymd(chart.vimshottari.birth.mahadasha.balance_ymd)}. As of{" "}
-          {dateOnly(dasha.as_of)}.
+          Dasha balance at birth: {graha(chart.vimshottari.birth.mahadasha.lord)} Mahadasha,{" "}
+          {dashaBalanceText(chart.vimshottari.timeline[0].start, chart.vimshottari.timeline[0])}. Dasha periods as of {dateOnly(dasha.as_of)}; the running periods
+          stay current until {dateOnly(dasha.pratyantardasha.end)}.
         </Text>
         <Text style={s.h3}>Mahadasha timeline</Text>
         {chart.vimshottari.timeline.map((p) => {
@@ -391,6 +404,11 @@ function PdfYogas({ chart, asOf, about }: { chart: Chart; asOf: string; about?: 
   return (
     <Section title="Yoga (planetary combinations)">
       {present.length === 0 && <Text style={s.muted}>No yogas were reported for this chart.</Text>}
+      {sharedLinks(present).map((l) => (
+        <Text key={l.planets.join("+")} style={[s.small, { color: C.warn, marginBottom: 4 }]}>
+          {l.yogas.join(", ")} rest on the same {l.planets.map(graha).join("–")} link: read them as one support, not as separate strengths.
+        </Text>
+      ))}
       {present.map((y) => (
         <View key={y.key} style={{ marginBottom: 6 }} wrap={false}>
           <Text style={s.bold}>
@@ -460,9 +478,7 @@ function PdfDoshas({ title, cards, about }: { title: string; cards: DoshaCard[];
               {r.current ? " (running now)" : ""}
             </Text>
           ))}
-          {c.coveredUntil && (
-            <Text style={s.small}>Kundlit lists Shani transit periods that end by {dateOnly(c.coveredUntil)}; one that ends later is not shown.</Text>
-          )}
+          {c.ranges.length > 0 && <Text style={s.small}>{"Saturn's sign changes computed by Grahavani (Lahiri), including retrograde returns."}</Text>}
           {c.rating.level && <RatingText rating={c.rating} label="" />}
           {about?.[c.key] && ABOUT_DOSHA_STATUSES.has(c.status) && <AboutText text={about[c.key]} />}
         </View>
@@ -485,13 +501,16 @@ function RatingText({ rating, label }: { rating: Rating<string>; label: string }
 }
 
 /** Marriage (D1 and Navamsa, Darakaraka, Upapada) and career (D10) factors. */
-function PdfMarriageCareer({ chart }: { chart: Chart }) {
+function PdfMarriageCareer({ chart, asOf }: { chart: Chart; asOf: string }) {
   const m = marriageFactors(chart);
+  const windows = marriageWindows(chart, asOf);
   const d10 = careerD10(chart);
   const bt = birthTimeCheck(chart, rashi);
   return (
     <Section title="Marriage and career factors (D9 / D10)">
-      {bt?.warn && <Text style={[s.small, { color: C.warn }]}>{bt.notes.join(" ")} D9-based statements are sensitive to the exact birth time.</Text>}
+      {bt && (bt.sensitive.d1 || bt.sensitive.d9) && (
+        <Text style={[s.small, { color: C.warn }]}>{[...bt.notesBy.d1, ...bt.notesBy.d9].join(" ")} D9-based statements are sensitive to the exact birth time.</Text>
+      )}
       <KeyValues
         rows={[
           ["D1 7th lord", `${grahaWithMeaning(m.d1.seventhLord)} in Bhava ${m.d1.lordHouse} (${m.d1.lordStrength})`],
@@ -503,6 +522,7 @@ function PdfMarriageCareer({ chart }: { chart: Chart }) {
           ["Upapada Lagna", `${rashi(m.upapada.sign)} (lord ${graha(m.upapada.lord)})`],
           ...(d10
             ? ([
+                ...(bt?.sensitive.d10 ? [["Birth time (D10)", `${bt.notesBy.d10.join(" ")} D10-based statements are sensitive to the exact birth time.`]] : []),
                 ["D10 Lagna", rashi(d10.lagnaSign)],
                 ["D10 10th and its lord", `${rashi(d10.tenthSign)}, lord ${graha(d10.tenthLord)}`],
                 ["Key planets in D10", d10.planets.map((p) => `${graha(p.name)} ${rashi(p.sign)} (${p.dignity})`).join("; ")],
@@ -515,6 +535,22 @@ function PdfMarriageCareer({ chart }: { chart: Chart }) {
           • {c}
         </Text>
       ))}
+      <Text style={s.h3}>Traditional timing windows</Text>
+      {windows.length ? (
+        windows.map((w) => (
+          <Text key={w.start} style={s.small}>
+            • {dateOnly(w.start)} – {dateOnly(w.end)}: {w.period.split("–").map(graha).join("–")} (
+            {w.rank === "MD and AD" ? "both Dasha lords are significators" : "Antardasha lord is a significator"}). {w.why.join("; ")}
+            {w.moonAlso ? "; also from the Moon" : ""}
+            {w.secondary.length ? `; also ${w.secondary.join(", ")}` : ""}.
+          </Text>
+        ))
+      ) : (
+        <Text style={s.small}>No double transit falls in a significator&apos;s Antardasha over the current and next Mahadasha.</Text>
+      )}
+      <Text style={s.small}>
+        A window is an Antardasha whose lord is a marriage significator while Jupiter and Saturn both occupy or aspect the same target from the Lagna (the 7th house, or the sign the 7th lord occupies). Traditional indicators only.
+      </Text>
     </Section>
   );
 }

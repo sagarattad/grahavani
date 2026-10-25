@@ -2,14 +2,13 @@
 // its lord, Venus in the D9, Darakaraka (Jaimini chara karaka) and Upapada
 // Lagna, with D9 strengths weighed against D1 weaknesses explicitly.
 import type { Chart } from "../kundlit-schemas";
-import { SEVEN, SIGN_LORD, dignityOf, dignityText, type Dignity, type Planet } from "./relations";
+import { SEVEN, SIGN_LORD, dignityOf, dignityText, vargaChange, type Dignity, type Planet } from "./relations";
 import { houseLords } from "./functional";
 import { chartStrengths, type StrengthLevel } from "./planet-strength";
 import { byName, houseFrom } from "./rules";
+import { tempSigns } from "./varga";
 
 const wrap = (n: number) => ((((n - 1) % 12) + 12) % 12) + 1;
-const GOOD = new Set(["exalted", "moolatrikona", "own", "great friend", "friend"]);
-const BAD = new Set(["debilitated", "great enemy", "enemy"]);
 
 export type MarriageFactors = {
   d1: { seventhSign: number; seventhLord: Planet; lordHouse: number; lordStrength: StrengthLevel; venusStrength: StrengthLevel; venusDignity: string };
@@ -27,7 +26,7 @@ export type MarriageFactors = {
   /** Atmakaraka: highest degree in its sign (same 7-karaka scheme). */
   atmakaraka: string;
   upapada: { sign: number; lord: Planet; method: string };
-  /** Plain comparisons: where the D9 improves or confirms the D1. */
+  /** Plain comparisons by dignity rank: where the D9 improves (mitigates), confirms or weakens the D1. */
   comparison: string[];
 };
 
@@ -71,7 +70,8 @@ export function upapada(chart: Chart): MarriageFactors["upapada"] {
 export function marriageFactors(chart: Chart): MarriageFactors {
   const strengths = chartStrengths(chart);
   const lords = houseLords(chart.lagna.sign_num);
-  const d9Signs = Object.fromEntries(chart.grahas.map((g) => [g.name, g.navamsha.sign_num]));
+  const d1Temp = tempSigns(chart, "d1");
+  const d9Temp = tempSigns(chart, "d9");
   const seventhLord = lords[7];
   const venus = byName(chart, "Venus");
   const lordG = byName(chart, seventhLord);
@@ -80,20 +80,21 @@ export function marriageFactors(chart: Chart): MarriageFactors {
   const d9Seventh = wrap(d9Lagna + 6);
   const d9Lord = SIGN_LORD[d9Seventh];
   const d9LordG = byName(chart, d9Lord);
-  const d9LordDignity = dignityOf(d9Lord, d9LordG.navamsha.sign_num, d9Signs);
-  const venusD9 = dignityOf("Venus", venus.navamsha.sign_num, d9Signs);
+  const d9LordDignity = dignityOf(d9Lord, d9LordG.navamsha.sign_num, d9Temp);
+  const venusD9 = dignityOf("Venus", venus.navamsha.sign_num, d9Temp);
   const venusS = strengths.get("Venus")!;
-
-  const comparison: string[] = [];
-  const d9Good = GOOD.has(venusD9.label);
-  if (venusS.level === "weak" && d9Good) comparison.push(`Venus is weak in the D1 but in ${dignityText(venusD9)} in the D9, which improves it.`);
-  else if (venusS.level === "weak") comparison.push(`Venus is weak in the D1 and not improved in the D9 (${dignityText(venusD9)}).`);
-  else if (BAD.has(venusD9.label)) comparison.push(`Venus is ${venusS.level} in the D1 but in ${dignityText(venusD9)} in the D9, which weakens it.`);
-  else comparison.push(`Venus: ${venusS.level} in the D1, ${dignityText(venusD9)} in the D9.`);
-  comparison.push(
-    `D9 7th lord ${d9Lord}: ${dignityText(d9LordDignity)}${d9LordG.vargottama ? ", Vargottama (same sign in D1 and D9, a strong confirmation)" : ""}.`,
-  );
   const l7 = strengths.get(seventhLord)!;
+
+  // D1 → D9 by dignity rank (debilitated … exalted).
+  const change = (p: Planet, role: string) => {
+    const g = byName(chart, p);
+    const d1 = dignityOf(p, g.sign_num, d1Temp, g.deg_in_sign);
+    const d9 = dignityOf(p, g.navamsha.sign_num, d9Temp);
+    const how = vargaChange(d1, d9);
+    const verdict = how === "improved" ? "improved in the D9 (a mitigation)" : how === "weakened" ? "weakened in the D9" : "the D9 confirms the D1";
+    return `${role}${p}: ${dignityText(d1)} in the D1, ${dignityText(d9)} in the D9: ${verdict}${g.vargottama ? "; Vargottama (same sign in D1 and D9, a strong confirmation)" : ""}.`;
+  };
+  const comparison = [...new Set([change("Venus", ""), change(seventhLord, "D1 7th lord "), change(d9Lord, "D9 7th lord ")])];
   comparison.push(`D1 7th lord ${seventhLord}: ${l7.level}, in Bhava ${lordG.house}.`);
 
   return {

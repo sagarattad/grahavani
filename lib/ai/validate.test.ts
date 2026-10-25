@@ -41,13 +41,16 @@ describe("facts", () => {
     expect(JSON.stringify(followup.facts)).toMatch(/Sade Sati/);
   });
 
-  it("carry Grahavani's factors: dignity, strength, functional nature, D9 / D10, Dasha lords, not computed", () => {
+  it("carry Grahavani's factors: dignity, strength, functional nature, D9 / D10, Dasha lords; no method fields", () => {
     expect(facts.functional_nature.yogakarakas).toEqual(["Shani"]); // Vrishabha Lagna
     expect(facts.marriage).toHaveProperty("darakaraka");
     expect(facts.marriage.upapada_lagna).toHaveProperty("rashi");
     expect(facts).toHaveProperty("career_d10");
     expect(facts.dasha_lords.mahadasha.reading.length).toBeGreaterThan(0);
-    expect(facts.not_computed).toContain("Sarvashtakavarga");
+    expect(facts).not.toHaveProperty("not_computed");
+    expect(facts).not.toHaveProperty("rating_basis");
+    expect(facts.marriage).toHaveProperty("timing_windows");
+    expect(facts.transits.jupiter_transits.length).toBeGreaterThan(0);
     expect(JSON.stringify(facts.grahas)).toMatch(/"strength":"(strong|moderate|weak)"/);
   });
 
@@ -265,6 +268,21 @@ describe("evidence rules (Oct 2026 review)", () => {
   });
 
   it("allows naming partial Shadbala components", () => {
-    expect(check("The partial Shadbala components give Surya a strong Dig bala.")).toEqual([]);
+    expect(check("The partial Shadbala components for Surya include Uccha and Dig bala.")).toEqual([]);
+  });
+
+  it("a Dig bala claim must match the planet's listed strength factors", () => {
+    const listed = kundliCtx.digBalaFactor!;
+    const all = ["Sun", "Moon", "Mars", "Mercury", "Jupiter", "Venus", "Saturn"];
+    const unlisted = all.find((p) => !listed.includes(p))!;
+    expect(check(`${unlisted} has low directional strength.`).join()).toMatch(/Dig bala that is not among/);
+    if (listed.length) expect(check(`${listed[0]} has low directional strength.`)).toEqual([]);
+  });
+
+  it("method wording stays out of the reading", () => {
+    expect(check("Sarvashtakavarga is not computed here.").join()).toMatch(/describes the method/);
+    expect(check("Rahu is explicitly not counted.").join()).toMatch(/describes the method/);
+    expect(check("According to FACTS, Venus is weak.").join()).toMatch(/describes the method/);
+    expect(check("These facts point to steady effort.")).toEqual([]);
   });
 });

@@ -33,4 +33,36 @@ export function birthDateTime(date: string, time: string): string {
 
 export const ymd = ([y, m, d]: number[]) => `${y}y ${m}m ${d}d`;
 
+const IST_PARTS = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" });
+/** Calendar date (IST) of an instant: [year, month, day]. */
+export function istDate(iso: string): [number, number, number] {
+  const [y, m, d] = IST_PARTS.format(new Date(iso)).split("-").map(Number);
+  return [y, m, d];
+}
+
+/**
+ * Calendar years, months and days from one instant to another (IST dates).
+ * Used for the Dasha balance at birth, so it agrees with the first
+ * Mahadasha's end date in the timeline (Kundlit's own balance_ymd uses a
+ * different year length and can differ by a few days).
+ */
+export function calendarSpan(fromIso: string, toIso: string): [number, number, number] {
+  const [y1, m1, d1] = istDate(fromIso);
+  let [y, m, d] = istDate(toIso);
+  if (d < d1) {
+    m -= 1;
+    d += new Date(Date.UTC(y, m, 0)).getUTCDate(); // days in the month before `toIso`'s month
+  }
+  if (m < m1) {
+    y -= 1;
+    m += 12;
+  }
+  return [y - y1, m - m1, d - d1];
+}
+
+/** "Sun Mahadasha, 1y 9m 24d (until 9 Jul 1997)" from the timeline's first Mahadasha. */
+export function dashaBalanceText(birthIso: string, firstMd: { end: string }): string {
+  return `${ymd(calendarSpan(birthIso, firstMd.end))} (until ${dateOnly(firstMd.end)})`;
+}
+
 export const points = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));

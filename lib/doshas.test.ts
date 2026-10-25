@@ -34,32 +34,27 @@ describe("doshas", () => {
     expect(absent.status).toBe("absent");
   });
 
-  it("Sade Sati dates come from the chart's transit data", () => {
-    const mumbai = sadeSatiCard(chartOf("mumbai"));
+  it("Sade Sati and Dhaiya come from Saturn's computed transits, over a full Saturn cycle", () => {
+    const mumbai = sadeSatiCard(chartOf("mumbai"), asOf);
     expect(mumbai.status).toBe("upcoming");
-    expect(mumbai.ranges.map((r) => r.label)).toEqual(["Rising", "Peak", "Setting"]);
-    expect(sadeSatiCard(raipur).status).toBe("none");
-  });
-
-  it("'none' only claims what Kundlit covers (periods ending within its 10-year window)", () => {
-    const ss = sadeSatiCard(raipur); // as_of 22 Oct 2026, nothing listed
-    expect(ss.statusLabel).toBe("Not running — none listed that ends before 22 Oct 2036");
-    expect(ss.statusLabel).not.toMatch(/next 10 years/);
-    expect(ss.coveredUntil).toBeDefined();
-    const dh = dhaiyaCard({ ...raipur, transit: { ...raipur.transit!, dhaiya_lifecycle: { kantaka_occurrences: [], ardha_ashtama_occurrences: [] } } });
-    expect(dh.statusLabel).toMatch(/none listed that ends before 22 Oct 2036/);
+    // A retrograde return shows as its own range; the phases still run Rising → Peak → Setting.
+    expect([...new Set(mumbai.ranges.map((r) => r.label))].slice(0, 3)).toEqual(["Rising", "Peak", "Setting"]);
+    // Kundlit's 10-year window listed nothing for Raipur; a 31-year span always finds the next one.
+    const ss = sadeSatiCard(raipur, asOf);
+    expect(ss.status).toBe("upcoming");
+    expect(ss.statusLabel).toMatch(/^Not running now — next from \d{1,2} \w{3} \d{4}$/);
+    expect(ss.statusLabel).not.toMatch(/none listed/);
   });
 
   it("Dhaiya: a range that contains as_of is running", () => {
-    expect(dhaiyaCard(raipur).status).toBe("running"); // Ardhashtama 2025-03-30 → 2028-02-23
+    expect(dhaiyaCard(raipur, asOf).status).toBe("running"); // Ardhashtama from 29 Mar 2025
   });
 
   it("missing data becomes 'unavailable', never an error", () => {
     const cards = buildDoshas({ chart: { ...raipur, transit: undefined }, manglik: null, kaalSarp: undefined, asOf });
-    // Manglik is computed from the chart itself, so it is never unavailable.
-    for (const k of ["kaalSarp", "sadeSati", "dhaiya"]) {
-      expect(cards.find((c) => c.key === k)!.status, k).toBe("unavailable");
-    }
+    // Manglik, Sade Sati and Dhaiya are computed locally, so only Kaal Sarp can be unavailable.
+    expect(cards.find((c) => c.key === "kaalSarp")!.status).toBe("unavailable");
+    for (const k of ["manglik", "sadeSati", "dhaiya"]) expect(cards.find((c) => c.key === k)!.status, k).not.toBe("unavailable");
   });
 
   it("Manglik card: Grahavani's houses, cancellations, reasoning and Mangal periods", () => {
@@ -67,7 +62,7 @@ describe("doshas", () => {
     expect(c.statusLabel).toBe("Present — Medium");
     expect(c.details[0]).toBe("From Lagna: Mars in the 7th — yes (North Indian set 1, 4, 7, 8, 12)");
     expect(c.details.join()).toMatch(/Cancellation: Mars in its own or exaltation sign \(tradition-dependent\)/);
-    expect(c.details.join()).toMatch(/Intensity: .*Total 1 → Medium/);
+    expect(c.details.join()).toMatch(/Intensity: .*Total \+1 − 0?\.?\d* ?.*= 1 → Medium|Intensity: .*= 1 → Medium/);
     for (const w of c.windows) expect(w.ad ?? w.md).toBe("Mars");
   });
 });

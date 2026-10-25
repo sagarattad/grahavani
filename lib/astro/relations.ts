@@ -1,7 +1,8 @@
 // Planetary relationships and dignity (Parashari). Kundlit's `dignity` field
-// only distinguishes exalted / moolatrikona / own / debilitated and calls
-// everything else "neutral", so the friend / enemy part is computed here:
-// natural (naisargika) + temporary (tatkalika) = compound (panchadha) relation.
+// calls everything below own sign "neutral" and ignores the BPHS degree zones
+// (Mercury is exalted only in Kanya 0–15°), so all dignity is computed here:
+// degree zones in the D1, and natural (naisargika) + temporary (tatkalika) =
+// compound (panchadha) relation to the sign lord.
 
 export const SEVEN = ["Sun", "Moon", "Mars", "Mercury", "Jupiter", "Venus", "Saturn"] as const;
 export type Planet = (typeof SEVEN)[number];
@@ -55,7 +56,7 @@ export function compoundRelation(natural: Natural, tempFriend: boolean): Compoun
 export type DignityClass = "exalted" | "moolatrikona" | "own" | "debilitated" | Compound;
 
 export type Dignity = {
-  /** Kundlit's class when it names one; otherwise the relation to the sign lord. */
+  /** Exalted / moolatrikona / own / debilitated, or the compound relation to the sign lord. */
   label: DignityClass;
   /** Natural relation to the sign lord ("friend's sign"), when not exalted / own / debilitated. */
   natural: Natural | null;
@@ -64,26 +65,52 @@ export type Dignity = {
   signLord: Planet;
 };
 
-const KUNDLIT_CLASSES = new Set(["exalted", "moolatrikona", "own", "debilitated"]);
+/**
+ * BPHS degree zones (D1 only): exaltation (end degree in the exaltation sign;
+ * 30 = the whole sign) and moolatrikona (sign, from, to). The rest of an own
+ * sign is "own"; debilitation is the whole opposite sign.
+ */
+export const DIGNITY_ZONES: Record<Planet, { exaltedTo: number; mt: [sign: number, from: number, to: number] }> = {
+  Sun: { exaltedTo: 30, mt: [5, 0, 20] },
+  Moon: { exaltedTo: 3, mt: [2, 3, 30] },
+  Mars: { exaltedTo: 30, mt: [1, 0, 12] },
+  Mercury: { exaltedTo: 15, mt: [6, 15, 20] },
+  Jupiter: { exaltedTo: 30, mt: [9, 0, 10] },
+  Venus: { exaltedTo: 30, mt: [7, 0, 15] },
+  Saturn: { exaltedTo: 30, mt: [11, 0, 20] },
+};
 
 /**
- * Dignity of a planet in `sign`, given where every planet is (sign numbers in
- * the same chart: D1 signs for D1 dignity, D9 signs for D9 dignity).
- * `kundlitClass` (D1 only) is used when it is one of exalted / moolatrikona /
- * own / debilitated, so our labels never contradict the data source.
+ * Dignity of a planet in `sign`.
+ * - `degInSign` given (D1): the BPHS degree zones apply.
+ * - No degree (a divisional chart): sign level; a sign that is both the
+ *   exaltation and an own / moolatrikona sign counts as exalted, and the rest
+ *   of an own sign as own (moolatrikona needs degrees).
+ * - `tempSigns`: where `p` and its sign lord sit for the temporary friendship
+ *   (the D1 signs by default, see config/astro.ts TATKALIKA_BASIS).
  */
-export function dignityOf(p: Planet, sign: number, signsOf: Partial<Record<string, number>>, kundlitClass?: string): Dignity {
+export function dignityOf(p: Planet, sign: number, tempSigns: Partial<Record<string, number>>, degInSign?: number): Dignity {
   const signLord = SIGN_LORD[sign];
-  if (kundlitClass && KUNDLIT_CLASSES.has(kundlitClass)) return { label: kundlitClass as DignityClass, natural: null, compound: null, signLord };
-  if (!kundlitClass) {
-    if (EXALTATION_SIGN[p] === sign) return { label: "exalted", natural: null, compound: null, signLord };
-    if (debilitationSign(p) === sign) return { label: "debilitated", natural: null, compound: null, signLord };
-    if (signLord === p) return { label: "own", natural: null, compound: null, signLord };
-  }
+  const fixed = (label: DignityClass): Dignity => ({ label, natural: null, compound: null, signLord });
+  const zone = DIGNITY_ZONES[p];
+  if (debilitationSign(p) === sign) return fixed("debilitated");
+  if (EXALTATION_SIGN[p] === sign && (degInSign === undefined || degInSign < zone.exaltedTo)) return fixed("exalted");
+  if (degInSign !== undefined && zone.mt[0] === sign && degInSign >= zone.mt[1] && degInSign < zone.mt[2]) return fixed("moolatrikona");
+  if (signLord === p) return fixed("own");
   const natural = naturalRelation(p, signLord);
-  const lordSign = signsOf[signLord];
-  const compound = lordSign ? compoundRelation(natural, temporaryFriend(sign, lordSign)) : null;
+  const mine = tempSigns[p] ?? sign;
+  const lordSign = tempSigns[signLord];
+  const compound = lordSign ? compoundRelation(natural, temporaryFriend(mine, lordSign)) : null;
   return { label: compound ?? (natural === "friend" ? "friend" : natural === "enemy" ? "enemy" : "neutral"), natural, compound, signLord };
+}
+
+/** Weakest to strongest; used to compare a planet's D1 and D9 dignity. */
+export const DIGNITY_RANK: DignityClass[] = ["debilitated", "great enemy", "enemy", "neutral", "friend", "great friend", "own", "moolatrikona", "exalted"];
+
+/** "improved" when the D9 dignity ranks above the D1 one (a mitigation), "weakened" below, "confirmed" equal. */
+export function vargaChange(d1: Dignity, varga: Dignity): "improved" | "weakened" | "confirmed" {
+  const diff = DIGNITY_RANK.indexOf(varga.label) - DIGNITY_RANK.indexOf(d1.label);
+  return diff > 0 ? "improved" : diff < 0 ? "weakened" : "confirmed";
 }
 
 /** "friend's sign (compound: great friend)" style text. */

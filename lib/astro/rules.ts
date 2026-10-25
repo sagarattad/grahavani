@@ -33,6 +33,10 @@ export type NeechaBhanga = {
   state: RuleState; // "formed" = debility cancelled; "not formed" = debility stands
   rules: string[]; // the classical conditions that fire
   cancelling: string[]; // planets involved in the cancellation
+  /** Conditions grouped by the planet that provides them (the D9 rule counts under the planet itself). */
+  byPlanet: { planet: string; rules: number }[];
+  /** "3 conditions from 2 planets (Mercury meets 2)". */
+  countText: string;
   /** Neecha Bhanga Raja Yoga: full when the planet also sits in a kendra / trikona from the Lagna and is not combust. */
   raja: { state: "full" | "partial" | "not formed"; why: string };
 };
@@ -44,7 +48,7 @@ export type NeechaBhanga = {
  * 2. lord of the planet's exaltation sign in a kendra;
  * 3. those two lords in mutual kendra;
  * 4. the planet conjunct or aspected by its dispositor;
- * 5. the planet conjunct the planet that is exalted in that sign;
+ * 5. the planet conjunct the planet whose exaltation sign it is (sign level, BPHS);
  * 6. the planet exalted in the D9.
  */
 export function neechaBhanga(chart: Chart): NeechaBhanga[] {
@@ -56,6 +60,7 @@ export function neechaBhanga(chart: Chart): NeechaBhanga[] {
       const p = g.name;
       const rules: string[] = [];
       const cancelling = new Set<string>();
+      const counts = new Map<string, number>();
       const dispName = SIGN_LORD[g.sign_num];
       const exLordName = SIGN_LORD[EXALTATION_SIGN[p]];
       const disp = byName(chart, dispName);
@@ -65,6 +70,7 @@ export function neechaBhanga(chart: Chart): NeechaBhanga[] {
       const fire = (text: string, ...by: string[]) => {
         rules.push(text);
         for (const n of by) cancelling.add(n);
+        for (const n of by.length ? by : [p]) counts.set(n, (counts.get(n) ?? 0) + 1);
       };
 
       const d = kendraFrom(disp);
@@ -75,7 +81,7 @@ export function neechaBhanga(chart: Chart): NeechaBhanga[] {
       if (dispName !== p && (conjunct(g, disp) || aspects(disp, g)))
         fire(`${p} is ${conjunct(g, disp) ? "conjunct" : "aspected by"} its dispositor ${dispName}`, dispName);
       const exaltedHere = chart.grahas.find((x) => isPlanet(x.name) && EXALTATION_SIGN[x.name] === g.sign_num);
-      if (exaltedHere && conjunct(g, exaltedHere)) fire(`${p} is conjunct ${exaltedHere.name}, which is exalted in this sign`, exaltedHere.name);
+      if (exaltedHere && conjunct(g, exaltedHere)) fire(`${p} is conjunct ${exaltedHere.name}, whose exaltation sign this is`, exaltedHere.name);
       if (g.navamsha.sign_num === EXALTATION_SIGN[p]) fire(`${p} is exalted in the D9`);
 
       const state: RuleState = rules.length ? "formed" : "not formed";
@@ -88,7 +94,11 @@ export function neechaBhanga(chart: Chart): NeechaBhanga[] {
               state: "partial",
               why: [!goodHouse && `${p} is in Bhava ${g.house}, not a kendra or trikona`, g.combust && `${p} is combust`].filter(Boolean).join("; "),
             };
-      return { planet: p, state, rules, cancelling: [...cancelling], raja };
+      const byPlanet = [...counts].map(([planet, n]) => ({ planet, rules: n }));
+      const multi = byPlanet.filter((x) => x.rules > 1).map((x) => `${x.planet} meets ${x.rules}`);
+      const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
+      const countText = `${plural(rules.length, "condition")} from ${plural(byPlanet.length, "planet")}${multi.length ? ` (${multi.join(", ")})` : ""}`;
+      return { planet: p, state, rules, cancelling: [...cancelling], byPlanet, countText, raja };
     });
 }
 
@@ -144,15 +154,24 @@ export type Link = { a: Planet; b: Planet; how: string };
 
 export const ord = (n: number) => `${n}${n === 1 ? "st" : n === 2 ? "nd" : n === 3 ? "rd" : "th"}`;
 
-/** Dhana Yoga: lords of 1, 2, 5, 9 and 11 linked by conjunction, mutual aspect or exchange. */
+/**
+ * Dhana Yoga: two different planets linked by conjunction, mutual aspect or
+ * exchange, where one is a wealth lord (2nd or 11th) and the other a lord of
+ * the 1st, 5th or 9th, or the 2nd and 11th lords together. A link of only
+ * 1st / 5th / 9th lords is a Raj Yoga, not counted again here.
+ */
 export function dhana(chart: Chart): Link[] {
   const lords = houseLords(chart.lagna.sign_num);
   const houses = [1, 2, 5, 9, 11];
   const rolesOf = (p: Planet) => houses.filter((h) => lords[h] === p);
+  const wealth = (h: number) => h === 2 || h === 11;
+  const qualifies = (a: number[], b: number[]) =>
+    a.some((x) => b.some((y) => (wealth(x) && (wealth(y) ? x !== y : [1, 5, 9].includes(y))) || (wealth(y) && [1, 5, 9].includes(x))));
   const planets = [...new Set(houses.map((h) => lords[h]))];
   const links: Link[] = [];
   for (let i = 0; i < planets.length; i++) {
     for (let j = i + 1; j < planets.length; j++) {
+      if (!qualifies(rolesOf(planets[i]), rolesOf(planets[j]))) continue;
       const A = byName(chart, planets[i]);
       const B = byName(chart, planets[j]);
       const exchange = SIGN_LORD[A.sign_num] === B.name && SIGN_LORD[B.sign_num] === A.name;

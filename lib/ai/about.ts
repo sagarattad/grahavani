@@ -1,7 +1,7 @@
 // "About this Yoga / Dosha": the items that get a short AI-written text, the
 // FACTS for that call, and the code-side checks. Pure (no database, no OpenAI)
 // so it can be unit-tested; see about-server.ts for generation and caching.
-import { GRAHAS, cancellationLabel, dignity, graha, nakshatra, rashi } from "../glossary";
+import { GRAHAS, cancellationLabel, graha, nakshatra, rashi } from "../glossary";
 import { yogaChecklist } from "../yogas";
 import { buildDoshas } from "../doshas";
 import { comparedText, doshaState, sortKoots } from "../summaries";
@@ -10,6 +10,8 @@ import { RATING_RE, normRating, validateReading } from "./validate";
 import type { ValidationContext } from "./facts";
 import { rateKootDosha, ratingPhrase } from "../strength";
 import type { Chart, KaalSarp, Manglik, Milan } from "../kundlit-schemas";
+import { chartStrengths } from "../astro/planet-strength";
+import { dignityText } from "../astro/relations";
 
 export type AboutTexts = Record<string, string>; // item key → text
 
@@ -73,9 +75,14 @@ export function aboutItemsForChart(chart: Chart, extras: { manglik: Manglik | nu
 
 /** FACTS for a chart's About texts: placements to tailor from, plus the items. */
 export function aboutFacts(chart: Chart, items: AboutItem[]) {
+  const strengths = chartStrengths(chart);
   const facts = {
     lagna: { rashi: rashi(chart.lagna.sign_num), lagna_lord: g(chart.lagna.lord) },
-    grahas: chart.grahas.map((x) => ({ graha: g(x.name), rashi: rashi(x.sign_num), bhava: x.house, dignity: dignity(x.dignity) })),
+    // Grahavani's dignity (BPHS degree zones, compound relation), not Kundlit's coarser class.
+    grahas: chart.grahas.map((x) => {
+      const d = strengths.get(x.name)?.dignity;
+      return { graha: g(x.name), rashi: rashi(x.sign_num), bhava: x.house, dignity: d ? dignityText(d) : "node" };
+    }),
     bhava_lords: Object.fromEntries(Object.entries(chart.functional.house_lords).map(([h, l]) => [h, graha(l)])),
     items,
   };
