@@ -56,13 +56,14 @@ export const s = StyleSheet.create({
 
 /**
  * The PDF font (Noto Sans, Latin subset) has no other scripts and no arrows or
- * ≤ / ≥: drop other scripts ("Pasha (पाश)" → "Pasha"), spell those symbols in
- * ASCII, and keep everything the font has, including the minus sign U+2212.
+ * ≤ / ≥: drop other scripts ("Pasha (पाश)" → "Pasha"), write "→" as a plain
+ * ", so" ("= 0.25, so Low") and ≤ / ≥ as <= / >=, and keep everything the font
+ * has, including the minus sign U+2212.
  */
 export const latin = (text: string) =>
   text
     .replace(/\s*\([^()\x00-\u024F]+\)/g, "")
-    .replace(/→/g, "->")
+    .replace(/\s*→\s*/g, ", so ")
     .replace(/≤/g, "<=")
     .replace(/≥/g, ">=")
     .replace(/[^\x00-\u024F\u2000-\u206F\u20AC\u2122\u2191\u2193\u2212\u2215]/g, "")
@@ -178,42 +179,48 @@ export function Table({ cols, rows }: { cols: [string, number, ("left" | "right"
 
 type KootItem = { koot?: string; earned?: number; max?: number; explanation?: string };
 
+/**
+ * The AI reading. Unlike other sections it has no border or bottom padding:
+ * it ends the document, and padding that does not fit on the last page made
+ * react-pdf add a page with only the footer. The closing note sits inside the
+ * last card so it can never be left alone on a page.
+ */
 export function ReadingSection({ kind, reading }: { kind: ReadingKind; reading: Reading | null }) {
+  const note = "AI-generated from the computed data only. Traditional interpretation; not medical, legal or financial advice.";
+  const cards = reading ? READING_CARDS[kind].filter(({ key }) => reading[key] !== undefined) : [];
   return (
-    <Section title="AI reading">
+    <View style={{ marginTop: 12 }}>
+      <Text style={s.h2} minPresenceAhead={120}>
+        AI reading
+      </Text>
       {!reading ? (
         <Text style={s.muted}>
           No AI reading yet. Tap “Get reading” on the Grahavani page, then download the PDF again to include it.
         </Text>
       ) : (
-        <View>
-          {READING_CARDS[kind].map(({ key, title }) => {
-            const value = reading[key];
-            if (value === undefined) return null;
-            return (
-              <View key={key} style={s.card} wrap={false}>
-                <Text style={[s.bold, { marginBottom: 2 }]}>{title}</Text>
-                {Array.isArray(value) ? (
-                  (value as KootItem[]).map((k, i) => (
-                    <Text key={i} style={{ marginTop: 2 }}>
-                      <Text style={s.bold}>
-                        {k.koot} · {k.earned} / {k.max}:{" "}
-                      </Text>
-                      {latin(k.explanation ?? "")}
+        cards.map(({ key, title }, i) => {
+          const value = reading[key];
+          return (
+            <View key={key} style={s.card} wrap={false}>
+              <Text style={[s.bold, { marginBottom: 2 }]}>{title}</Text>
+              {Array.isArray(value) ? (
+                (value as KootItem[]).map((k, j) => (
+                  <Text key={j} style={{ marginTop: 2 }}>
+                    <Text style={s.bold}>
+                      {k.koot} · {k.earned} / {k.max}:{" "}
                     </Text>
-                  ))
-                ) : (
-                  <Text>{latin(String(value))}</Text>
-                )}
-              </View>
-            );
-          })}
-          <Text style={[s.small, { marginTop: 6 }]}>
-            AI-generated from the computed data only. Traditional interpretation; not medical, legal or financial advice.
-          </Text>
-        </View>
+                    {latin(k.explanation ?? "")}
+                  </Text>
+                ))
+              ) : (
+                <Text>{latin(String(value))}</Text>
+              )}
+              {i === cards.length - 1 && <Text style={[s.small, { marginTop: 6 }]}>{note}</Text>}
+            </View>
+          );
+        })
       )}
-    </Section>
+    </View>
   );
 }
 

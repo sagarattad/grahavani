@@ -14,12 +14,15 @@ import { rateDhaiya, rateKaalSarp, rateKemadruma, rateManglik, rateSadeSati, typ
 
 export type DateRange = PhaseRange;
 
-/** "Rising: 3 Jun 2027 – 17 Apr 2030 (Saturn leaves the sign meanwhile: back into Meena …; ahead into Vrishabha …)", marking cuts by the computed span. */
+/** "Rising: 23 Feb 2028 – 17 Apr 2030 (brief earlier entry 3 Jun – 20 Oct 2027; Saturn briefly ahead in Vrishabha …)", marking cuts by the computed span. */
 export function rangeText(r: DateRange): string {
   const from = r.startsBefore ? `before ${dateOnly(r.start)}` : dateOnly(r.start);
   const to = r.continuesBeyond ? `continues beyond ${dateOnly(r.end)}` : dateOnly(r.end);
-  const dips = r.dips?.map((d) => `${d.direction === "back" ? "back into" : "ahead into"} ${rashi(d.sign)} ${dateOnly(d.start)} – ${dateOnly(d.end)}`);
-  return `${r.label}: ${from} – ${to}${dips?.length ? ` (Saturn leaves the sign meanwhile: ${dips.join("; ")})` : ""}`;
+  const notes = [
+    ...(r.earlyEntries ?? []).map((e) => `brief earlier entry ${dateOnly(e.start)} – ${dateOnly(e.end)}`),
+    ...(r.dips ?? []).map((d) => `Saturn ${d.direction === "back" ? "back in" : "briefly ahead in"} ${rashi(d.sign)} ${dateOnly(d.start)} – ${dateOnly(d.end)}`),
+  ];
+  return `${r.label}: ${from} – ${to}${notes.length ? ` (${notes.join("; ")})` : ""}`;
 }
 
 export type DoshaCard = {

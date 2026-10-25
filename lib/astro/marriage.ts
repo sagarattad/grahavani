@@ -98,8 +98,10 @@ export function marriageFactors(chart: Chart): MarriageFactors {
     const d9 = dignityOf(p, g.navamsha.sign_num, d9Temp);
     const { role, improved } = vargaReading(d1, d9);
     const who = labels.filter((l) => l !== p).join(" and ");
+    // "neutral" as both the dignity and its role is said once.
+    const d9Text = dignityFact(d9) === role ? role : `${dignityFact(d9)}, ${role}`;
     return (
-      `${who ? `${who} ` : ""}${p} (${st.level}, Bhava ${g.house}): ${dignityFact(d1)} in the D1; D9 ${rashi(g.navamsha.sign_num)} ${dignityFact(d9)}: ${role}` +
+      `${who ? `${who} ` : ""}${p} (${st.level}, Bhava ${g.house}): ${dignityFact(d1)} in the D1; in the D9 (${rashi(g.navamsha.sign_num)}) ${d9Text}` +
       `${improved ? ", improved from the D1 (a mitigation)" : ""}${g.vargottama ? "; Vargottama (same sign in D1 and D9, a strong confirmation)" : ""}.`
     );
   });

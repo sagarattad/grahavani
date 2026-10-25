@@ -10,6 +10,8 @@ const kaalSarpFx = loadKaalSarpFixtures().find((k) => k.file.includes("absent"))
 const extras = { manglik: manglikFx, kaalSarp: kaalSarpFx, birthDate: "1990-01-15" };
 const { ctx: kundliCtx, facts } = kundliFacts(raipur, raipur.vimshottari.current, extras);
 const followup = kundliFacts(raipur, raipur.vimshottari.current, extras, true);
+/** Raipur's D9 / D10 Lagna are birth-time sensitive; tests about other rules leave the caveat rule out. */
+const placementCtx = { ...kundliCtx, birthTimeSensitive: undefined };
 
 const kundliOut = (text: string) => ({
   personality: text,
@@ -50,7 +52,8 @@ describe("facts", () => {
     expect(facts).not.toHaveProperty("not_computed");
     expect(facts).not.toHaveProperty("rating_basis");
     expect(facts.marriage).toHaveProperty("timing_windows");
-    expect(facts.transits.jupiter_transits.length).toBeGreaterThan(0);
+    expect(facts.transits).toHaveProperty("jupiter_next");
+    expect(facts.transits).not.toHaveProperty("jupiter_transits");
     expect(JSON.stringify(facts.grahas)).toMatch(/"strength":"(strong|moderate|weak)"/);
   });
 
@@ -66,7 +69,7 @@ describe("Kundli validation", () => {
     const text =
       "Mangal (Mars) is placed in Vrishchika, its own sign. Mars sits in the 7th house. " +
       "Guru in Mithuna adds learning. Chandra is in the fourth bhava. In your Navamsa, Mars in Kumbha shows...";
-    expect(validateReading(kundliOut(text), kundliCtx)).toEqual([]);
+    expect(validateReading(kundliOut(text), placementCtx)).toEqual([]);
   });
 
   it("rejects a Rashi that is not in the facts", () => {
@@ -248,7 +251,7 @@ describe("ratings in fixed phrases", () => {
 });
 
 describe("evidence rules (Oct 2026 review)", () => {
-  const check = (text: string) => validateReading({ career: text }, kundliCtx);
+  const check = (text: string) => validateReading({ career: text }, placementCtx);
 
   it("rejects absolute negative verdicts", () => {
     expect(check("Venus gives very little result.").join()).toMatch(/absolute negative/);
@@ -297,6 +300,23 @@ describe("evidence rules (Oct 2026 review)", () => {
       expect(check(`The D9 is read next. Shukra in ${venusD9} is neutral, improved from D1.`)).toEqual([]);
     }
     expect(check("The main weaknesses are weak Shukra, the seventh lord in Bhava 8, and the D10 tenth lord's great enemy dignity.").join()).not.toMatch(/for Venus/);
+  });
+
+  it("every field with a D9 / D10 claim carries the birth-time caveat, summary and karmic included (rule E4)", () => {
+    const ctx = { ...placementCtx, birthTimeSensitive: { d9: true, d10: false } };
+    expect(validateReading({ summary: "Support improves in the D9." }, ctx).join()).toMatch(/summary: D9-based claims need the birth-time caveat/);
+    expect(validateReading({ karmic_perspective: "Mangal is exalted in the Navamsa." }, ctx).join()).toMatch(/karmic_perspective/);
+    expect(validateReading({ summary: "Support tentatively improves in the D9." }, ctx)).toEqual([]);
+    expect(validateReading({ summary: "The D10 adds strength." }, ctx)).toEqual([]); // the D10 is not sensitive here
+  });
+
+  it("a cancelled dosha does not operate: no residual wording (rule C1)", () => {
+    const ctx = { ...placementCtx, cancelledDoshas: ["Kemadruma Dosha", "Kemadruma"] };
+    expect(validateReading({ doshas: "Kemadruma Dosha is formed but cancelled; the cancellations reduce its isolating theme." }, ctx).join()).toMatch(/cancelled dosha/);
+    expect(validateReading({ doshas: "Kemadruma is cancelled but not erased." }, ctx).join()).toMatch(/cancelled dosha/);
+    expect(validateReading({ doshas: "Kemadruma Dosha is formed but cancelled: noted for completeness, it traditionally does not operate." }, ctx)).toEqual([]);
+    expect(validateReading({ doshas: "Manglik Dosha remains; cancellations reduce it." }, ctx)).toEqual([]); // not cancelled
+    expect(validateReading({ doshas: "Kemadruma is formed but cancelled. Manglik Dosha remains, and its cancellations reduce it." }, ctx)).toEqual([]);
   });
 
   it("window count and ranking follow FACTS (rule W1)", () => {

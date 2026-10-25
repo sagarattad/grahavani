@@ -32,7 +32,7 @@ describe.each(fx)("local ephemeris against Kundlit: $file", ({ file, chart }) =>
 
   it.skipIf(!chart.transit)("every Kundlit Sade Sati date is a computed Saturn sign change within one day", () => {
     const asOf = chart.transit!.as_of;
-    const edges = sadeSatiRanges(chart, asOf).flatMap((r) => [ms(r.start), ms(r.end)]);
+    const edges = sadeSatiRanges(chart, asOf).flatMap((r) => [r, ...(r.earlyEntries ?? []), ...(r.dips ?? [])].flatMap((x) => [ms(x.start), ms(x.end)]));
     const kundlit = chart.transit!.sade_sati_lifecycle.occurrences.flatMap((o) => Object.values(o).filter((v): v is string => typeof v === "string"));
     for (const d of kundlit) {
       if (ms(d) < ms(asOf)) continue; // ranges are listed from as_of on
@@ -44,6 +44,11 @@ describe.each(fx)("local ephemeris against Kundlit: $file", ({ file, chart }) =>
 describe.each(fx)("Saturn phases shown once per cycle: $file", ({ chart }) => {
   const asOf = chart.vimshottari.current.as_of;
   const span = transitSpan(chart, asOf);
+
+  it("phases never overlap each other", () => {
+    const all = [...sadeSatiRanges(chart, asOf), ...dhaiyaRanges(chart, asOf)].sort((x, y) => ms(x.start) - ms(y.start));
+    for (let i = 1; i < all.length; i++) expect(ms(all[i].start), `${all[i - 1].label} / ${all[i].label}`).toBeGreaterThanOrEqual(ms(all[i - 1].end) - 60_000);
+  });
 
   it("no phase repeats within a cycle; dips are inside their phase; cuts are marked", () => {
     for (const ranges of [sadeSatiRanges(chart, asOf), dhaiyaRanges(chart, asOf)]) {

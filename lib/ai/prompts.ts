@@ -22,8 +22,8 @@ DATA RULES
 RATINGS
 R1. Some Yogas and Doshas in FACTS have a "rating" (Grahavani's classical rating). State a
     rating ONLY in its fixed form, copied from FACTS: "rated Strong", "rated Moderate" or
-    "rated Weak" for a Yoga; "intensity: High", "intensity: Medium" or "intensity: Low" for a
-    Dosha. Name that one Yoga or Dosha in the same sentence. You may explain it with its
+    "rated Weak" for a Yoga; "intensity: High", "intensity: Medium", "intensity: Low" or
+    "intensity: Cancelled" for a Dosha. Name that one Yoga or Dosha in the same sentence. You may explain it with its
     rating_reasons in plain words. Never invent or change a rating.
 R2. The rating is not Shadbala. Never call it Shadbala or a Shadbala score. Full Shadbala is
     not calculated; FACTS may give partial Shadbala components (Uccha, Dig, the Moon's
@@ -40,10 +40,12 @@ E2. For each topic, state both the supportive factors and the weakening factors 
 E3. No absolute or deterministic negative phrasing ("very little result", "marked
     difficulties", "will never", "no chance") unless at least two strong factors in FACTS
     agree; then name them. Planet strength words must follow FACTS.grahas[].strength.
-E4. If FACTS.birth_time.warning is true, say once that conclusions depending on the D9 (and
-    on the D1 Lagna, if its note is listed) are sensitive to the exact birth time, and keep
-    those statements tentative. Do the same in career for the D10 when
-    FACTS.career_d10.birth_time_sensitive is given.
+E4. If FACTS.birth_time.warning is true, conclusions depending on the D9 (and on the D1
+    Lagna, if its note is listed) are sensitive to the exact birth time; so are D10
+    conclusions when FACTS.career_d10.birth_time_sensitive is given. EVERY field that makes
+    such a claim, including summary and karmic_perspective, must call it tentative in that
+    field (e.g. "tentatively", "if the birth time is exact"); say why once, in the first
+    such field.
 E5. The yogakaraka (FACTS.functional_nature.yogakarakas) is the most important functional
     benefic: use it in career, Dasha and Manglik discussion where it appears.
 E6. Yogas listed together in FACTS.shared_links rest on the same planetary link: present them
@@ -58,6 +60,9 @@ D1. A planet's dignity (grahas[].dignity, navamsa_dignity, planets_in_d10[].dign
 D2. The D9 is judged on its own (grahas[].navamsa_role): supportive, neutral or weakening.
     Call the D9 an improvement only when navamsa_improves_d1 is true, and never call a
     supportive D9 dignity a weakening factor.
+C1. A Dosha with "intensity: Cancelled" is formed but cancelled: say its formation is noted
+    for completeness and that it traditionally does not operate. Do not describe any
+    remaining or reduced effect ("not erased", "retains", "residual", "reduces").
 W1. Marriage timing windows: if you give a number of windows, it must be
     marriage.timing_windows_count. If marriage.timing_windows_ranked is false, do not rank
     or compare the windows (no "stronger", "best", "weaker"); present them in date order.
@@ -121,8 +126,9 @@ current_dasha (the running Mahadasha / Antardasha / Pratyantar Dasha and their e
 exactly as in FACTS, read through FACTS.dasha_lords: house lordship, placement, strength,
 role and yogas; for Rahu / Ketu, their dispositor and the planets they sit with, and say so if
 a node sits with the yogakaraka in a kendra; then any FACTS.transits.saturn_overlaps with
-these periods, with dates exactly as given, and Jupiter's position now and its next sign
-changes from FACTS.transits.jupiter_transits, with dates exactly as given),
+these periods, with dates exactly as given, and only Jupiter's current sign
+(FACTS.transits.jupiter_now) and its next sign (jupiter_next, with its date); do not list
+further Jupiter transits),
 yogas (the yogas in yogas_present, strongest first: for each, its rating in the fixed form
 (rule R1) first, then what that means here: a Strong Yoga's traditional effects; a Moderate
 one's partial effect; for a Weak or cancelled one, say plainly that it gives little of its
@@ -131,7 +137,8 @@ in, with dates exactly as in FACTS. Report Neecha Bhanga (debility cancelled) se
 from Neechabhanga Raj Yoga. Treat yogas in FACTS.shared_links as one support (E6)),
 doshas (each present, cancelled or running dosha in FACTS first: its status and, if given,
 its rating in the fixed form, what it traditionally makes harder in everyday terms,
-cancellations (which reduce but do not remove it) and the periods it is traditionally felt
+cancellations (for a dosha still present they reduce but do not remove it; a dosha with
+intensity: Cancelled follows rule C1) and the periods it is traditionally felt
 in. For Manglik Dosha, give the houses from Lagna, Moon and Venus, the house set, which
 tradition-dependent cancellations apply, and how the intensity was worked out. Then list
 absent doshas briefly in one sentence),

@@ -71,7 +71,7 @@ function collectStrings(v: unknown, out: string[] = []): string[] {
 
 // Ratings may only be stated in these fixed forms (see ratingPhrase in lib/strength.ts).
 // English only: localise together with the prompts when other languages are added.
-export const RATING_RE = /\b(?:rated\s+(strong|moderate|weak)|intensity:?\s+(high|medium|low))\b/gi;
+export const RATING_RE = /\b(?:rated\s+(strong|moderate|weak)|intensity:?\s+(high|medium|low|cancelled))\b/gi;
 const cap = (w: string) => w[0].toUpperCase() + w.slice(1).toLowerCase();
 export const normRating = (m: RegExpMatchArray) => (m[1] ? `rated ${cap(m[1])}` : `intensity: ${cap(m[2])}`);
 
@@ -95,6 +95,13 @@ const GRAHA_NAME_RE = new RegExp(`\\b(${GRAHA_RE})\\b`, "gi");
 
 // A dignity word attached to a planet ("in an enemy's sign", "neutral dignity", "compound: friend").
 const DIGNITY_WORD_RE = /\b(?:(great enemy|great friend|enemy|friend|neutral)(?:['’]s)?\s+(?:sign|rashi|dignity)|compound:?\s+(great enemy|great friend|enemy|friend|neutral))\b/gi;
+const OTHER_DOSHA_NAMES = [...Object.values(DOSHAS).map((d) => d.en.replace(/ Dosha$/, "")), "Nadi", "Bhakoot", "Sade Sati", "Dhaiya"];
+// Residual-effect wording, not allowed for a dosha that is formed but cancelled (rule C1).
+const RESIDUAL_RE = /\b(not (?:fully )?(?:erased|removed|eliminated)|without (?:removing|erasing)|rather than (?:remov|eras)\w*|retains?|residual|still (?:operates?|active|felt|present)|reduces?|reduced|weakens? but)\b/i;
+
+// A birth-time caveat, required in every field that makes a D9 / D10 claim when that chart is sensitive (rule E4).
+const TENTATIVE_RE = /tentativ|sensitive to (?:the )?(?:exact )?birth[- ]time|birth[- ]time[- ]sensitive|if the birth time is (?:exact|accurate)|depends? on (?:the )?exact birth time/i;
+
 // "two windows", "3 timing windows"
 const WINDOW_COUNT_RE = /\b(one|two|three|four|five|six|seven|eight|\d{1,2})\s+(?:[a-z-]+\s+){0,3}?windows?\b/gi;
 const NUMBER_WORDS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight"];
@@ -208,15 +215,17 @@ const D1_RE = /\bin (?:the |your )?(?:d-?1(?: chart)?|birth chart|rashi chart|la
  * Lagna. Mangal in Meena…") until a sentence names another chart.
  */
 function sentencesWithVarga(fields: string[]) {
-  const out: { sentence: string; d9: boolean; d10: boolean }[] = [];
+  const out: { sentence: string; d9: boolean; d10: boolean; prev: string }[] = [];
   for (const para of fields.flatMap((f) => f.split(/\n+/))) {
     let carried: "d9" | "d10" | null = null;
+    let prev = "";
     for (const sentence of sentencesOf(para)) {
       const d9 = D9_RE.test(sentence);
       const d10 = D10_RE.test(sentence);
       if (d9 !== d10) carried = d9 ? "d9" : "d10";
       else if (!d9 && D1_RE.test(sentence)) carried = null;
-      out.push({ sentence, d9: d9 || carried === "d9", d10: d10 || carried === "d10" });
+      out.push({ sentence, d9: d9 || carried === "d9", d10: d10 || carried === "d10", prev });
+      prev = sentence;
     }
   }
   return out;
@@ -239,11 +248,21 @@ export function validateReading(output: unknown, ctx: ValidationContext): string
     });
   }
 
+  // Birth-time caveat per field (rule E4): summary and karmic_perspective included.
+  if (ctx.birthTimeSensitive && output && typeof output === "object") {
+    for (const [field, value] of Object.entries(output as Record<string, unknown>)) {
+      if (typeof value !== "string" || TENTATIVE_RE.test(value)) continue;
+      for (const [chart, re] of [["D9", D9_RE], ["D10", D10_RE]] as const) {
+        if (ctx.birthTimeSensitive[chart === "D9" ? "d9" : "d10"] && re.test(value)) problems.push(`${field}: ${chart}-based claims need the birth-time caveat ("tentative") in this field too`);
+      }
+    }
+  }
+
   // 0. Ratings: fixed phrases must match FACTS (checked per text field).
   if (ctx.ratings?.length) for (const field of collectStrings(output)) problems.push(...checkRatings(field, ctx.ratings));
 
   const borderline = new Map<string, number>();
-  for (const { sentence, d9, d10 } of sentencesWithVarga(collectStrings(output))) {
+  for (const { sentence, d9, d10, prev } of sentencesWithVarga(collectStrings(output))) {
     // Never present a rating as Shadbala.
     if (SHADBALA_RE.test(sentence) && RATING_WORD_RE.test(sentence) && !NOT_COVERED_RE.test(sentence))
       problems.push(`"${sentence.slice(0, 80)}" presents a rating as Shadbala`);
@@ -269,6 +288,18 @@ export function validateReading(output: unknown, ctx: ValidationContext): string
         const allowed = [dg.d1, d9 ? dg.d9 : undefined, d10 ? dg.d10 : undefined].filter(Boolean);
         if (!allowed.includes(word)) problems.push(`"${m[0]}" for ${api}: its dignity is ${allowed.join(" / ")} (use the compound dignity from FACTS)`);
       }
+    }
+
+    // A cancelled dosha traditionally does not operate: no residual-effect wording (rule C1).
+    if (ctx.cancelledDoshas?.length) {
+      // The dosha may be named in this sentence or the one before ("Kemadruma is cancelled; the cancellations reduce…").
+      const norm = (t: string) => t.toLowerCase().replace(/-/g, " ");
+      const has = (t: string, n: string) => norm(t).includes(norm(n));
+      // A sentence about another dosha stands on its own.
+      const other = OTHER_DOSHA_NAMES.some((n) => has(sentence, n) && !ctx.cancelledDoshas!.some((c) => has(c, n) || has(n, c)));
+      const named = ctx.cancelledDoshas.find((n) => has(sentence, n) || (!other && has(prev, n)));
+      const residual = named && sentence.match(RESIDUAL_RE);
+      if (residual) problems.push(`"${residual[0]}" about ${named}: a cancelled dosha is noted for completeness and traditionally does not operate`);
     }
 
     // Window count and ranking must follow FACTS.marriage (rule W1).

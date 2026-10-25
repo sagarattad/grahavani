@@ -9,7 +9,9 @@ import type { ManglikResult } from "./astro/manglik";
 import { chartStrengths, strengthReason, type PlanetStrength, type StrengthLevel } from "./astro/planet-strength";
 
 export type YogaLevel = "Strong" | "Moderate" | "Weak";
-export type DoshaLevel = "High" | "Medium" | "Low";
+/** "Cancelled": formed but cancelled, noted for completeness; traditionally it does not operate. */
+export type DoshaLevel = "High" | "Medium" | "Low" | "Cancelled";
+export const CANCELLED_NOTE = "Formed but cancelled: noted for completeness; traditionally it does not operate";
 export type Rating<L extends string> = {
   level: L | null;
   label: string;
@@ -127,7 +129,8 @@ const MANGLIK_LEVEL: Record<string, DoshaLevel> = { high: "High", medium: "Mediu
 export function rateManglik(m: Manglik | ManglikResult): Rating<DoshaLevel> {
   if ("grahavani" in m) {
     const g = m.grahavani;
-    if (!m.manglik) return doshaRating(null, g.intensity === "cancelled" ? [g.steps[g.steps.length - 1]] : []);
+    if (g.intensity === "cancelled") return doshaRating("Cancelled", [CANCELLED_NOTE, g.steps[g.steps.length - 1]]);
+    if (!m.manglik) return doshaRating(null, []);
     return doshaRating(MANGLIK_LEVEL[g.intensity] ?? "Medium", [
       g.steps[g.steps.length - 1],
       ...g.cancellations.filter((c) => c.applies).map((c) => `${c.text} (tradition-dependent)`),
@@ -151,7 +154,7 @@ export function rateKaalSarp(k: KaalSarp): Rating<DoshaLevel> {
 export function rateKemadruma(present: boolean, cancellations: string[]): Rating<DoshaLevel> {
   if (!present) return doshaRating(null, []);
   return cancellations.length
-    ? doshaRating("Low", cancellations.map((c) => `Cancelled: ${c}`))
+    ? doshaRating("Cancelled", [CANCELLED_NOTE, ...cancellations.map((c) => `Cancelled by: ${c}`)])
     : doshaRating("Medium", ["Formed, and none of the classical cancellations apply"]);
 }
 

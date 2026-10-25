@@ -144,6 +144,28 @@ describe.skipIf(!present)("regression: case A (local-only fixture)", () => {
     }
   });
 
+  describe("round 4 (Oct 2026)", () => {
+    const r4 = present ? expected.round4 : null!;
+    const asOf = present ? chart.vimshottari.current.as_of : "";
+
+    it("a cancelled dosha shows intensity Cancelled", () => {
+      expect(kemadrumaCard(chart, asOf).rating.label).toBe(r4.kemadruma_rating);
+    });
+
+    it("Saturn phases start at the final entry and never overlap", () => {
+      const ss = sadeSatiRanges(chart, asOf).slice(0, 3);
+      expect(Object.fromEntries(ss.map((r) => [r.label, r.start.slice(0, 10)]))).toEqual(r4.phase_starts);
+      expect(ss[0].earlyEntries![0].start.slice(0, 10)).toBe(r4.rising_early_entry);
+      for (let i = 1; i < ss.length; i++) expect(ss[i].start).toBe(ss[i - 1].end);
+    });
+
+    it("no repeated labels in the marriage lines", () => {
+      const lines = marriageFactors(chart).comparison;
+      expect(lines.find((l) => l.includes("D1 7th lord"))).toContain(r4.comparison_saturn);
+      expect(lines.join()).not.toMatch(/\b(\w+): \1\b/);
+    });
+  });
+
   describe("round 3 (Oct 2026)", () => {
     const r3 = present ? expected.round3 : null!;
     const asOf = present ? chart.vimshottari.current.as_of : "";

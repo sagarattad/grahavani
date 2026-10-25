@@ -65,12 +65,27 @@ describe("PDF rendering", () => {
     });
     const { text } = await extractText(new Uint8Array(buf), { mergePages: true });
     const flat = text.replace(/\s+/g, " ");
-    expect(flat).toContain("Total +1 + 1 − 1 = 1 -> Medium (<= 0 cancelled");
+    expect(flat).toContain("Total +1 + 1 − 1 = 1, so Medium (<= 0 cancelled");
     expect(flat).toContain(latin(total).replace(/\s+/g, " "));
   }, 30_000);
 
-  it("latin(): keeps U+2212, spells arrows and ≤ in ASCII, drops other scripts", () => {
-    expect(latin("+1 + 0.5 − 1 − 0.25 = 0.25 → Low (≤ 0)")).toBe("+1 + 0.5 − 1 − 0.25 = 0.25 -> Low (<= 0)");
+  it("never ends on a page with only the footer or the closing note, whatever the reading length", async () => {
+    const raipur = loadKundliFixtures().find((f) => f.file.includes("raipur"))!;
+    const filler = "Ketu in Bhava 8 is traditionally read as what the soul has already mastered. ".repeat(40).split(" ");
+    for (let n = 0; n <= 400; n += 25) {
+      const reading = { ...kundliReading, karmic_perspective: filler.slice(0, n + 5).join(" ") };
+      const buf = await renderPdf({
+        kind: "kundli",
+        data: { person: person("Test Person"), chart: raipur.chart, dasha: raipur.chart.vimshottari.current, doshas: doshasFor(raipur.chart, null), attribution: raipur.attribution, reading },
+      });
+      const { text } = await extractText(new Uint8Array(buf), { mergePages: false });
+      const body = (text as string[]).at(-1)!.replace(/Data computed by[\s\S]*$/, "").trim();
+      expect(body.length, `reading of ${n} words`).toBeGreaterThan(200);
+    }
+  }, 120_000);
+
+  it("latin(): keeps U+2212, writes arrows as words and ≤ in ASCII, drops other scripts", () => {
+    expect(latin("+1 + 0.5 − 1 − 0.25 = 0.25 → Low (≤ 0)")).toBe("+1 + 0.5 − 1 − 0.25 = 0.25, so Low (<= 0)");
     expect(latin("Pasha (पाश) yoga")).toBe("Pasha yoga");
   });
 

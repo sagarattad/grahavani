@@ -18,6 +18,7 @@ import { marriageFactors } from "../astro/marriage";
 import { marriageSignificators, marriageTiming } from "../astro/marriage-timing";
 import { birthTimeCheck, careerD10, d10Fact, transitOverlaps } from "../astro/timing-checks";
 import { readDashaLord, type DashaLordReading } from "../astro/dasha-lords";
+import { JUPITER_GOOD_FROM_MOON } from "../astro/transits";
 import { dasamsaSign } from "../astro/varga";
 import type { ManglikResult } from "../astro/manglik";
 
@@ -35,6 +36,10 @@ export type ValidationContext = {
   digBalaFactor?: string[];
   /** Each planet's one dignity (compound relation or own / exalted / …) per chart. */
   dignities?: Record<string, { d1?: string; d9?: string; d10?: string }>;
+  /** Charts whose Lagna changes within minutes of the birth time: their claims must be tentative. */
+  birthTimeSensitive?: { d9: boolean; d10: boolean };
+  /** Names of doshas that are formed but cancelled (they traditionally do not operate). */
+  cancelledDoshas?: string[];
   /** Marriage timing windows: how many there are, and whether any rank above another. */
   windows?: { count: number; ranked: boolean };
 };
@@ -95,7 +100,8 @@ function doshaFact(c: DoshaCard) {
       running_now: r.current,
       ...(r.startsBefore ? { started_before_from: true } : {}),
       ...(r.continuesBeyond ? { continues_beyond_to: true } : {}),
-      ...(r.dips?.length ? { saturn_leaves_the_sign: r.dips.map((d) => ({ into: rashi(d.sign), direction: d.direction, from: dateOnly(d.start), to: dateOnly(d.end) })) } : {}),
+      ...(r.earlyEntries?.length ? { brief_earlier_entries: r.earlyEntries.map((e) => ({ from: dateOnly(e.start), to: dateOnly(e.end) })) } : {}),
+      ...(r.dips?.length ? { saturn_briefly_elsewhere: r.dips.map((d) => ({ in: rashi(d.sign), direction: d.direction, from: dateOnly(d.start), to: dateOnly(d.end) })) } : {}),
     })),
   };
 }
@@ -142,6 +148,7 @@ export function kundliFacts(chart: Chart, dasha: DashaCurrent, extras: KundliExt
   const d10 = careerD10(chart);
   const bt = birthTimeCheck(chart, rashi);
   const tr = transitOverlaps(chart, asOf);
+  const jupiterNext = tr.jupiter.find((j) => new Date(j.from).getTime() > now);
   const sig = marriageSignificators(chart);
   const { windows, brief } = marriageTiming(chart, asOf);
   const windowsRanked = new Set(windows.map((w) => w.rank)).size > 1;
@@ -257,16 +264,25 @@ export function kundliFacts(chart: Chart, dasha: DashaCurrent, extras: KundliExt
     },
     transits: {
       saturn_overlaps: tr.overlaps.map((o) => ({ transit: o.transit, from: dateOnly(o.from), to: dateOnly(o.to), overlaps_dasha: `${graha(o.period.split("–")[0])}–${graha(o.period.split("–")[1])}`, dasha_from: dateOnly(o.periodFrom), dasha_to: dateOnly(o.periodTo) })),
-      jupiter_now: { rashi: rashi(tr.jupiterNow.sign), house_from_chandra: tr.jupiterNow.fromMoon, house_from_lagna: tr.jupiterNow.fromLagna },
-      jupiter_transits: tr.jupiter.slice(0, 8).map((j) => ({
-        rashi: rashi(j.sign),
-        from: dateOnly(j.from),
-        to: dateOnly(j.to),
-        house_from_chandra: j.fromMoon,
-        house_from_lagna: j.fromLagna,
-        favourable_from_chandra: j.favourable,
-        overlaps_dasha: j.periods.map((p) => p.split("–").map(graha).join("–")),
-      })),
+      jupiter_now: {
+        rashi: rashi(tr.jupiterNow.sign),
+        house_from_chandra: tr.jupiterNow.fromMoon,
+        house_from_lagna: tr.jupiterNow.fromLagna,
+        favourable_from_chandra: JUPITER_GOOD_FROM_MOON.includes(tr.jupiterNow.fromMoon),
+      },
+      // Only the next sign change: the full Jupiter table is on the page, not in the reading.
+      ...(jupiterNext
+        ? {
+            jupiter_next: {
+              rashi: rashi(jupiterNext.sign),
+              from: dateOnly(jupiterNext.from),
+              to: dateOnly(jupiterNext.to),
+              house_from_chandra: jupiterNext.fromMoon,
+              house_from_lagna: jupiterNext.fromLagna,
+              favourable_from_chandra: jupiterNext.favourable,
+            },
+          }
+        : {}),
     },
     yogas_present: present.map((y) => ({
       yoga: y.name,
@@ -313,6 +329,8 @@ export function kundliFacts(chart: Chart, dasha: DashaCurrent, extras: KundliExt
         .map((s) => [s.name, { d1: dignityFact(s.dignity!), d9: dignityFact(s.d9Dignity!), d10: d10Fact(chart, s.name) }]),
     ),
     windows: { count: windows.length, ranked: windowsRanked },
+    ...(bt ? { birthTimeSensitive: { d9: bt.sensitive.d9, d10: bt.sensitive.d10 } } : {}),
+    cancelledDoshas: doshaCards.filter((c) => c.status === "cancelled").flatMap((c) => ratingEntry(c.key, c.name, c.rating, "dosha").names),
   };
   return { facts, ctx };
 }

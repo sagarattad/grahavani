@@ -8,6 +8,7 @@ const TONE: Record<string, "good" | "warn" | "bad" | "muted"> = {
   High: "bad",
   Medium: "warn",
   Low: "good",
+  Cancelled: "muted",
 };
 
 /** Grahavani's classical rating (Yogas) or intensity (Doshas), with its reasons. */

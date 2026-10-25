@@ -28,9 +28,9 @@ export const PRICES: Record<string, { input: number; output: number }> = {
   "gemini-3.8-flash": { input: 0, output: 0 },
 };
 
-export const PROMPT_VERSION = "v10"; // v3: ratings in fixed phrases; v4: direct tone; v5: karmic perspective; v6: no positive spin; v7: positivity rules removed; v8: evidence rules, D9 / D10, Dasha lords, transits; v9: shared links, borderline, marriage windows, Jupiter transits, no method wording; v10: one compound dignity, D9 role, window count, borderline once
+export const PROMPT_VERSION = "v11"; // v3: ratings in fixed phrases; v4: direct tone; v5: karmic perspective; v6: no positive spin; v7: positivity rules removed; v8: evidence rules, D9 / D10, Dasha lords, transits; v9: shared links, borderline, marriage windows, Jupiter transits, no method wording; v10: one compound dignity, D9 role, window count, borderline once; v11: cancelled doshas, tentative everywhere, Jupiter now and next
 // Separate version for the About texts, so changing them never regenerates readings.
-export const ABOUT_PROMPT_VERSION = "a8"; // a3: longer, plain-language texts; a4: ratings; a5: direct tone; a6: rating first, no positive spin; a7: Grahavani dignity, level-average yoga rule; a8: one compound dignity
+export const ABOUT_PROMPT_VERSION = "a9"; // a3: longer, plain-language texts; a4: ratings; a5: direct tone; a6: rating first, no positive spin; a7: Grahavani dignity, level-average yoga rule; a8: one compound dignity; a9: intensity: Cancelled
 
 // Per visitor (or signed-in user) across all pages, and per chart / match across all visitors.
 export const FOLLOWUP_LIMITS = { perVisitorPerDay: 10, perPagePerDay: 20 };
