@@ -836,3 +836,12 @@ All in `lib/astro/rules.ts` and `lib/astro/manglik.ts`, replacing Kundlit's Neec
 - Blemished Raj Yoga bullets read "… — a Raj yoga (blemished: Shani rules the 8th)."
 - When all marriage windows agree on the Dasha side, FACTS give one sentence (`timing_windows_note`, e.g. "Neither window has both Dasha lords as significators."); "both Dasha lords are not significators" is rewritten.
 - The D9 7th lord and D10 10th lord are recomputed under the neighbouring Lagna(s) inside the sensitivity window (`lagnaLordCheck`): the same planet under all of them is firm (the house sign itself stays tentative); a different one is tentative. Facts, the birth-time box and the validator follow this.
+
+## Implementation notes (26 Oct 2026): round 7 (a third local chart, case C)
+
+- **Manglik weights** (tradition-dependent, shown in the breakdown and footnote): from the Lagna 1, the Moon 0.75, Venus 0.5; the South-Indian-only 2nd house 0.25. Without a hit from the Lagna the intensity is at most Medium. The exemption is always named "Mars yogakaraka (Karka/Simha Lagna exemption)". Case A moves to 0 (formed but cancelled); Raipur from 1 to 0.75 (Low).
+- **Sign exchange (parivartana)**: Raj Yoga also forms by exchange between a kendra lord and a trikona lord; Parivartana yogas are listed as Maha / Khala (3rd) / Dainya (6th, 8th, 12th) by the two houses involved; a debilitated planet exchanging signs with its dispositor is a tradition-dependent Neecha Bhanga condition.
+- **Neechabhanga Raj Yoga**: formed only when the planet is also neutral or better in the D9 (enemy, great enemy or debilitated → partial, rated Weak); when formed it is rated on the planet's own level, one level higher with two or more independent cancellations, at most Moderate when the planet is weak (the cancelling planets are not averaged in).
+- **Suppressed D9 / D10** (Lagna within 2 minutes): the D9 7th house and lord, and the D10 10th house and lord, are left out of rows, bullets and FACTS, and the D9 7th lord is not a marriage significator.
+- **About texts**: house pairs named in a Yoga's About text must be linked in one of its computed combinations.
+- **Shared links** are grouped per link (planet pairs inside each combination, or one planet's placement); a yoga with several links is named by the one in the group and its other links are listed as separate.

@@ -19,13 +19,14 @@ describe("yoga ratings match the calibration on all fixtures", () => {
     // Neecha Bhanga itself is not rated (null); its Raja Yoga is.
     // Partial Adhi with one benefic is rated Weak (a mild effect).
     ["mumbai", { raja: "S", neecha_bhanga: null, neechabhanga: "W", adhi: "W", budhaditya: "M", ubhayachari: "M" }],
-    ["raipur", { ruchaka: "M", raja: "M", dhana: "W", adhi: "W", vasi: "W" }],
+    ["raipur", { ruchaka: "M", raja: "M", dhana: "W", adhi: "W", parivartana_dainya: "W", vasi: "W" }],
     ["bengaluru", { ruchaka: "S", malavya: "S", raja: "M", harsha: "W", adhi: "W", yogakaraka_kendra: "S", chandra_mangala: "M", vasi: "M" }],
     ["1999-04-12", { hamsa: "M", raja: "M", dhana: "W", neecha_bhanga: null, neechabhanga: "M", vimala: "M", sunaphaa: "M", budhaditya: "M", vesi: "W" }],
-    ["2014-12-15", { ruchaka: "M", hamsa: "M", raja: "S", vimala: "W", yogakaraka_kendra: "S", vesi: "W" }],
+    // Mars ↔ Saturn exchange (5th / 7th lords): Maha Parivartana and a blemished Raj Yoga link.
+    ["2014-12-15", { ruchaka: "M", hamsa: "M", raja: "S", vimala: "W", parivartana_maha: "M", yogakaraka_kendra: "S", vesi: "W" }],
     // Raj Yoga: Mercury + Saturn average Strong, but Saturn also rules the 8th (blemished, one lower).
     ["2018-06-25", { bhadra: "S", raja: "M", dhana: "W", neecha_bhanga: null, neechabhanga: "W", harsha: "M", adhi: "W", durdhura: "S", budhaditya: "M", vesi: "W" }],
-    ["2021-06-15", { sasa: "M", gajakesari: "M", raja: "M", dhana: "M", neecha_bhanga: null, neechabhanga: "M", sarala: "W", adhi: "W", anaphaa: "W", ubhayachari: "M" }],
+    ["2021-06-15", { sasa: "M", gajakesari: "M", raja: "M", dhana: "M", neecha_bhanga: null, neechabhanga: "M", sarala: "W", adhi: "W", parivartana_dainya: "M", anaphaa: "W", ubhayachari: "M" }],
   ])("%s", (part, expected) => {
     expect(ratings(part)).toEqual(expected);
   });

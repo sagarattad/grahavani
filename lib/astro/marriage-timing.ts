@@ -9,6 +9,7 @@ import { houseLords } from "./functional";
 import { byName, houseFrom } from "./rules";
 import { darakaraka, upapada } from "./marriage";
 import { slowTransits, type TransitStay } from "./transits";
+import { birthTimeCheck } from "./timing-checks";
 
 const wrap = (n: number) => ((((n - 1) % 12) + 12) % 12) + 1;
 const ms = (s: string) => new Date(s).getTime();
@@ -34,7 +35,8 @@ export function marriageSignificators(chart: Chart): Significators {
   add(primary, "Venus", "Venus, the natural significator");
   add(primary, lords[7], "D1 7th lord");
   add(primary, darakaraka(chart).planet, "Darakaraka");
-  add(primary, SIGN_LORD[wrap(chart.navamsha_lagna.sign_num + 6)], "D9 7th lord");
+  // Not when the D9 is suppressed (its Lagna changes within 2 minutes of the birth time).
+  if (!birthTimeCheck(chart, rashi)?.uninterpretable.d9) add(primary, SIGN_LORD[wrap(chart.navamsha_lagna.sign_num + 6)], "D9 7th lord");
   for (const node of ["Rahu", "Ketu"]) {
     const disp = SIGN_LORD[byName(chart, node).sign_num];
     if (primary.has(disp) && !primary.has(node)) add(primary, node, `node in a sign of ${disp} (${primary.get(disp)![0]})`);

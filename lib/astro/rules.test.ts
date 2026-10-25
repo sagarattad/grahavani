@@ -125,12 +125,13 @@ describe("Manglik (Grahavani)", () => {
   it("cancellations reduce the intensity, with each step shown", () => {
     const b = computeManglik(chartOf("bengaluru")); // Karka Lagna, Mars exalted with the Moon
     expect(b.grahavani.cancellations.filter((c) => c.applies).map((c) => c.text)).toEqual([
-      "Mars is yogakaraka for Karka Lagna (Karka / Simha exemption)",
+      "Mars yogakaraka (Karka/Simha Lagna exemption)",
       "Mars in its own or exaltation sign",
       "Mars conjunct the Moon",
     ]);
-    expect(b.severity).toBe("low");
-    expect(b.grahavani.steps.at(-1)).toBe("Total +1 + 1 + 1 − 1 − 1 − 0.5 = 0.5 → Low (≤ 0 cancelled, < 1 low, < 2 medium, else high)");
+    // Weighted: Lagna 1 + Moon 0.75 + Venus 0.5 − 1 − 1 − 0.5 = −0.25.
+    expect(b.severity).toBe("cancelled");
+    expect(b.grahavani.steps.at(-1)).toBe("Total +1 + 0.75 + 0.5 − 1 − 1 − 0.5 = -0.25 → Formed but cancelled (≤ 0 cancelled, < 1 low, < 2 medium, else high)");
   });
 
   it("formed but cancelled when the cancellations outweigh it", () => {

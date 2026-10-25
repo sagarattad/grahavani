@@ -8,6 +8,7 @@ import { houseLords } from "./functional";
 import { chartStrengths, type StrengthLevel } from "./planet-strength";
 import { byName, houseFrom } from "./rules";
 import { tempSigns } from "./varga";
+import { birthTimeCheck } from "./timing-checks";
 
 const wrap = (n: number) => ((((n - 1) % 12) + 12) % 12) + 1;
 
@@ -22,6 +23,8 @@ export type MarriageFactors = {
     lordVargottama: boolean;
     venusD9Sign: number;
     venusD9Dignity: Dignity;
+    /** The D9 Lagna changes within 2 minutes of the birth time: its 7th house and lord are not used. */
+    suppressed: boolean;
   };
   darakaraka: { planet: string; scheme: string; degInSign: number; eightKaraka: string };
   /** Atmakaraka: highest degree in its sign (same 7-karaka scheme). */
@@ -90,7 +93,10 @@ export function marriageFactors(chart: Chart): MarriageFactors {
   // (friend or better supports, neutral is neutral, enemy or worse weakens),
   // and "improved" only when a neutral-or-worse D1 dignity is bettered.
   const roles = new Map<Planet, string[]>();
-  for (const [p, role] of [["Venus", "Venus"], [seventhLord, "D1 7th lord"], [d9Lord, "D9 7th lord"]] as [Planet, string][]) roles.set(p, [...(roles.get(p) ?? []), role]);
+  // A suppressed D9 (Lagna within 2 minutes) gives no 7th lord to read.
+  const d9Suppressed = Boolean(birthTimeCheck(chart, rashi)?.uninterpretable.d9);
+  const planets: [Planet, string][] = [["Venus", "Venus"], [seventhLord, "D1 7th lord"], ...(d9Suppressed ? [] : ([[d9Lord, "D9 7th lord"]] as [Planet, string][]))];
+  for (const [p, role] of planets) roles.set(p, [...(roles.get(p) ?? []), role]);
   const comparison = [...roles].map(([p, labels]) => {
     const g = byName(chart, p);
     const st = strengths.get(p)!;
@@ -117,6 +123,7 @@ export function marriageFactors(chart: Chart): MarriageFactors {
       lordVargottama: d9LordG.vargottama,
       venusD9Sign: venus.navamsha.sign_num,
       venusD9Dignity: venusD9,
+      suppressed: d9Suppressed,
     },
     darakaraka: darakaraka(chart),
     atmakaraka: atmakaraka(chart),

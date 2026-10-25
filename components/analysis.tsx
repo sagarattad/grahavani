@@ -111,10 +111,15 @@ export function MarriageCareerSection({ chart, asOf }: { chart: Chart; asOf: str
           ],
           ["Venus (D1)", `${m.d1.venusDignity} (${m.d1.venusStrength})`],
           ["D9 Lagna", rashi(m.d9.lagnaSign)],
-          [
-            "D9 7th and its lord",
-            `${rashi(m.d9.seventhSign)}, lord ${graha(m.d9.seventhLord)} in D9 ${rashi(m.d9.lordD9Sign)}: ${dignityText(m.d9.lordD9Dignity)}${m.d9.lordVargottama ? ", Vargottama" : ""}`,
-          ],
+          // Lagna-dependent rows are left out when the D9 is suppressed.
+          ...(m.d9.suppressed
+            ? []
+            : ([
+                [
+                  "D9 7th and its lord",
+                  `${rashi(m.d9.seventhSign)}, lord ${graha(m.d9.seventhLord)} in D9 ${rashi(m.d9.lordD9Sign)}: ${dignityText(m.d9.lordD9Dignity)}${m.d9.lordVargottama ? ", Vargottama" : ""}`,
+                ],
+              ] as [string, string][])),
           [
             "Venus (D9)",
             `${rashi(m.d9.venusD9Sign)}: ${dignityText(m.d9.venusD9Dignity)}`,
@@ -188,10 +193,9 @@ export function MarriageCareerSection({ chart, asOf }: { chart: Chart; asOf: str
           <Rows
             rows={[
               ["D10 Lagna", rashi(d10.lagnaSign)],
-              [
-                "D10 10th and its lord",
-                `${rashi(d10.tenthSign)}, lord ${graha(d10.tenthLord)}`,
-              ],
+              ...(bt?.uninterpretable.d10
+                ? []
+                : ([["D10 10th and its lord", `${rashi(d10.tenthSign)}, lord ${graha(d10.tenthLord)}`]] as [string, string][])),
               ...d10.planets.map(
                 (p) =>
                   [

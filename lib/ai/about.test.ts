@@ -18,7 +18,7 @@ const good = () => ({
 describe("About items", () => {
   it("lists exactly the present Yogas and Doshas", () => {
     // Kemadruma is formed but cancelled (Grahavani's rule), so it counts as present.
-    expect(keys.sort()).toEqual(["dhaiya", "kemadruma", "manglik", "nabhasa.pasha", "yoga.adhi", "yoga.dhana", "yoga.raja", "yoga.ruchaka", "yoga.vasi"].sort());
+    expect(keys.sort()).toEqual(["dhaiya", "kemadruma", "manglik", "nabhasa.pasha", "yoga.adhi", "yoga.dhana", "yoga.parivartana_dainya", "yoga.raja", "yoga.ruchaka", "yoga.vasi"].sort());
   });
 
   it("skips absent doshas and absent checklist yogas", () => {
@@ -42,6 +42,13 @@ describe("About items", () => {
     expect(v("As the chart's own note says, it is mild.")).toMatch(/do not refer to the chart's notes/);
     expect(v("In this chart it carries intensity: Medium.")).toMatch(/state the rating as its own sentence/);
     expect(v("In this chart it has intensity: Medium.")).toMatch(/state the rating as its own sentence/);
+  });
+
+  it("house pairs in a Yoga's About text must be linked in one of its combinations", () => {
+    const yi = [{ key: "yoga.dhana", name: "Dhana Yoga", kind: "yoga" as const, status: "present", details: ["Mars (lord of 2nd) and Saturn (lord of 5th): exchange of signs", "Mercury (lord of 9th) and Sun (lord of 11th): conjunction in Dhanu"], cancellations: [], rating: "rated Moderate", rating_reasons: [] }];
+    const v = (t: string) => validateAbout({ items: [{ key: "yoga.dhana", about: t }] }, ["yoga.dhana"], ctx, yi).join();
+    expect(v("It links the 2nd and 5th lords, and the 9th and 11th lords.")).not.toMatch(/not linked/);
+    expect(v("It links the lords of the 2nd and 11th houses.")).toMatch(/"2nd and 11th" are not linked/);
   });
 
   it("a running transit dosha names its phase, without dates", () => {
@@ -116,7 +123,7 @@ describe("About ratings", () => {
     const ruchaka = items.find((i) => i.key === "yoga.ruchaka")!;
     expect(ruchaka.rating).toBe("rated Moderate"); // Mars strong, one level lower for the Bhanga
     expect(ruchaka.rating_reasons.join()).toMatch(/Bhanga/);
-    expect(items.find((i) => i.key === "manglik")!.rating).toBe("Medium intensity"); // 7th from Lagna, 4th from Moon, own sign −1
+    expect(items.find((i) => i.key === "manglik")!.rating).toBe("Low intensity"); // 7th from Lagna (1), 4th from Moon (0.75), own sign −1
     expect(items.find((i) => i.key === "nabhasa.pasha")!.rating).toBe("not rated");
   });
 

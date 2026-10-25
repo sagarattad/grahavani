@@ -3,10 +3,10 @@
 // (lib/astro/transits.ts); Kaal Sarp comes from Kundlit. Missing data
 // (e.g. a Kaal Sarp call that failed, or a chart saved before transit data was
 // kept) becomes "unavailable" instead of breaking the page.
-import { DOSHAS, rashi } from "./glossary";
+import { DOSHAS, rashi, severity } from "./glossary";
 import { dateOnly } from "./format";
 import { activationWindows, type Window } from "./dasha";
-import { computeManglik, INTENSITY_LABEL } from "./astro/manglik";
+import { computeManglik, INTENSITY_LABEL, MANGLIK_WEIGHTS_NOTE } from "./astro/manglik";
 import { kemadruma, ord } from "./astro/rules";
 import { dhaiyaRanges, sadeSatiRanges, saturnOverNatal, type PhaseRange } from "./astro/transits";
 import { functionalNature } from "./astro/functional";
@@ -65,7 +65,12 @@ const t = (s: string) => new Date(s).getTime();
  * Mars from Lagna, Moon and Venus, which house set applies, each cancellation
  * (applies or not, tradition-dependent) and the intensity reasoning.
  */
-export function manglikCard(chart: Chart, asOf: string): DoshaCard {
+/** Kundlit's own Manglik verdict, as one reference line ("Kundlit's own rating: Manglik, Medium"). */
+export function kundlitManglikLine(k: Manglik): string {
+  return `Kundlit's own rating: ${k.manglik ? `Manglik, ${severity(k.severity)}` : "not Manglik"} (Grahavani's intensity above uses its own weights and cancellations)`;
+}
+
+export function manglikCard(chart: Chart, asOf: string, kundlit?: Manglik | null): DoshaCard {
   const m = computeManglik(chart);
   const g = m.grahavani;
   const status = g.intensity === "none" ? "absent" : g.intensity === "cancelled" ? "cancelled" : "present";
@@ -83,7 +88,9 @@ export function manglikCard(chart: Chart, asOf: string): DoshaCard {
             ...g.cancellations.filter((c) => !c.applies && c.weight > 0).map((c) => `Does not apply: ${c.text}`),
             ...g.cancellations.filter((c) => c.note).map((c) => `Note: ${c.text}: ${c.note}`),
             `Intensity: ${g.steps.join("; ")}`,
+            MANGLIK_WEIGHTS_NOTE,
           ]),
+      ...(kundlit ? [kundlitManglikLine(kundlit)] : []),
     ],
     // A cancelled dosha has no "felt in" periods.
     windows: status === "present" ? activationWindows(["Mars"], chart.vimshottari.timeline, asOf, Infinity) : [],
@@ -184,11 +191,13 @@ export function buildDoshas(opts: {
   chart: Chart;
   manglik?: Manglik | null;
   kaalSarp?: KaalSarp | null;
+  /** Kundlit's own Manglik result, for one reference line on the card (pages and PDF; not sent to the AI). */
+  kundlitManglik?: Manglik | null;
   asOf: string;
 }): DoshaCard[] {
   const { chart, asOf } = opts;
   return [
-    manglikCard(chart, asOf),
+    manglikCard(chart, asOf, opts.kundlitManglik),
     kaalSarpCard(opts.kaalSarp, chart, asOf),
     kemadrumaCard(chart, asOf),
     sadeSatiCard(chart, asOf),

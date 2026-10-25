@@ -250,8 +250,13 @@ export function kundliFacts(chart: Chart, dasha: DashaCurrent, extras: KundliExt
       d1_7th_lord: { graha: g(mf.d1.seventhLord), bhava: mf.d1.lordHouse, strength: mf.d1.lordStrength },
       venus_d1: { dignity: mf.d1.venusDignity, strength: mf.d1.venusStrength },
       d9_lagna: rashi(mf.d9.lagnaSign),
-      d9_7th: rashi(mf.d9.seventhSign),
-      d9_7th_lord: { graha: g(mf.d9.seventhLord), d9_rashi: rashi(mf.d9.lordD9Sign), d9_dignity: dignityFact(mf.d9.lordD9Dignity), vargottama: mf.d9.lordVargottama },
+      // A suppressed D9 has no 7th house or lord to read.
+      ...(mf.d9.suppressed
+        ? { d9_not_interpreted: true }
+        : {
+            d9_7th: rashi(mf.d9.seventhSign),
+            d9_7th_lord: { graha: g(mf.d9.seventhLord), d9_rashi: rashi(mf.d9.lordD9Sign), d9_dignity: dignityFact(mf.d9.lordD9Dignity), vargottama: mf.d9.lordVargottama },
+          }),
       venus_d9: { rashi: rashi(mf.d9.venusD9Sign), dignity: dignityFact(mf.d9.venusD9Dignity) },
       darakaraka: { graha: g(mf.darakaraka.planet), scheme: mf.darakaraka.scheme, eight_karaka_scheme: g(mf.darakaraka.eightKaraka) },
       upapada_lagna: { rashi: rashi(mf.upapada.sign), lord: g(mf.upapada.lord) },

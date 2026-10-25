@@ -2,7 +2,8 @@
 // passed through). Mars's house is counted from the Lagna, the Moon and Venus.
 // North Indian set (1, 4, 7, 8, 12) decides the status; the South Indian rule
 // adds the 2nd and is shown separately. Cancellations are tradition-dependent
-// and each one is listed as applying or not. Intensity is worked out in steps.
+// and each one is listed as applying or not. Intensity is worked out in steps,
+// with tradition-dependent weights per reference (MANGLIK_WEIGHTS).
 import type { Chart, Manglik } from "../kundlit-schemas";
 import { EXALTATION_SIGN, ownSigns } from "./relations";
 import { functionalNature } from "./functional";
@@ -10,6 +11,15 @@ import { aspects, byName, conjunct, houseFrom, ord } from "./rules";
 
 export const NORTH_SET = [1, 4, 7, 8, 12];
 export const SOUTH_EXTRA = 2;
+
+/**
+ * Tradition-dependent weights: Mars counted from the Lagna weighs most, then
+ * the Moon, then Venus; the South-Indian-only 2nd house counts 0.25 from any
+ * of them. A chart with no hit from the Lagna is at most Medium.
+ */
+export const MANGLIK_WEIGHTS = { Lagna: 1, Moon: 0.75, Venus: 0.5, southOnly: 0.25 } as const;
+export const MANGLIK_WEIGHTS_NOTE =
+  "Weights (tradition-dependent): from the Lagna 1, from the Moon 0.75, from Venus 0.5; the South-Indian-only 2nd house 0.25. Without a hit from the Lagna the intensity is at most Medium.";
 
 export type ManglikRef = { from: "Lagna" | "Moon" | "Venus"; house: number; north: boolean; southOnly: boolean };
 export type ManglikCancellation = { text: string; applies: boolean; weight: number; note?: string };
@@ -55,7 +65,7 @@ export function computeManglik(chart: Chart): ManglikResult {
   const jupConj = conjunct(jupiter, mars);
   const jupAsp = aspects(jupiter, mars);
   const cancellations: ManglikCancellation[] = [
-    { text: `Mars is yogakaraka for ${chart.lagna.sign} Lagna (Karka / Simha exemption)`, applies: yk, weight: 1 },
+    { text: "Mars yogakaraka (Karka/Simha Lagna exemption)", applies: yk, weight: 1 },
     { text: "Mars in its own or exaltation sign", applies: ownOrExalted, weight: 1 },
     { text: jupConj ? "Jupiter conjunct Mars" : "Jupiter conjunct or aspecting Mars", applies: jupConj || jupAsp, weight: 1 },
     { text: "Mars conjunct the Moon", applies: conjunct(mars, moon), weight: 0.5 },
@@ -70,14 +80,13 @@ export function computeManglik(chart: Chart): ManglikResult {
 
   const steps: string[] = [];
   let score = 0;
+  const weightOf = (r: ManglikRef) => (r.north ? MANGLIK_WEIGHTS[r.from] : r.southOnly ? MANGLIK_WEIGHTS.southOnly : 0);
   for (const r of refs) {
-    if (r.north) {
-      score += 1;
-      steps.push(`From ${r.from}: Mars in the ${ord(r.house)} → +1`);
-    } else if (r.southOnly) {
-      score += 0.5;
-      steps.push(`From ${r.from}: Mars in the 2nd (South Indian rule only) → +0.5`);
-    } else steps.push(`From ${r.from}: Mars in the ${ord(r.house)} → no`);
+    const w = weightOf(r);
+    if (r.north) steps.push(`From ${r.from}: Mars in the ${ord(r.house)} → +${w} (weight ${w})`);
+    else if (r.southOnly) steps.push(`From ${r.from}: Mars in the 2nd (South Indian rule only) → +${w}`);
+    else steps.push(`From ${r.from}: Mars in the ${ord(r.house)} → no`);
+    score += w;
   }
   const formed = refs.some((r) => r.north || r.southOnly);
   if (formed) {
@@ -87,15 +96,20 @@ export function computeManglik(chart: Chart): ManglikResult {
     }
   }
   score = Math.round(score * 100) / 100;
-  const intensity: ManglikIntensity = !formed ? "none" : score <= 0 ? "cancelled" : score < 1 ? "low" : score < 2 ? "medium" : "high";
+  const lagnaHit = refs[0].north || refs[0].southOnly;
+  const raw: ManglikIntensity = !formed ? "none" : score <= 0 ? "cancelled" : score < 1 ? "low" : score < 2 ? "medium" : "high";
+  // No hit from the Lagna: at most Medium.
+  const intensity: ManglikIntensity = raw === "high" && !lagnaHit ? "medium" : raw;
   if (formed) {
     // Signed sum of every term, e.g. "+1 + 0.5 − 1 − 0.25 = 0.25".
     const terms = [
-      ...refs.filter((r) => r.north || r.southOnly).map((r) => (r.north ? 1 : 0.5)),
+      ...refs.filter((r) => r.north || r.southOnly).map(weightOf),
       ...cancellations.filter((c) => c.applies && c.weight).map((c) => -c.weight),
     ];
     const sum = terms.map((v, i) => (i === 0 ? `${v < 0 ? "−" : "+"}${Math.abs(v)}` : `${v < 0 ? "−" : "+"} ${Math.abs(v)}`)).join(" ");
-    steps.push(`Total ${sum} = ${score} → ${INTENSITY_LABEL[intensity]} (≤ 0 cancelled, < 1 low, < 2 medium, else high)`);
+    steps.push(
+      `Total ${sum} = ${score} → ${INTENSITY_LABEL[intensity]} (≤ 0 cancelled, < 1 low, < 2 medium, else high${raw !== intensity ? "; no hit from the Lagna, so at most Medium" : ""})`,
+    );
   }
 
   const north = refs.some((r) => r.north);

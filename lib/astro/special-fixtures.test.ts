@@ -20,9 +20,9 @@ describe.skipIf(!chartOf("2026-04-20-delhi-leo"))("Simha Lagna Manglik", () => {
     expect(c.lagna.sign_num).toBe(5);
     const m = computeManglik(c);
     expect(m.grahavani.refs[0]).toMatchObject({ from: "Lagna", house: 8, north: true });
-    expect(m.grahavani.cancellations.find((x) => x.text.startsWith("Mars is yogakaraka for Simha Lagna"))!.applies).toBe(true);
+    expect(m.grahavani.cancellations.find((x) => x.text === "Mars yogakaraka (Karka/Simha Lagna exemption)")!.applies).toBe(true);
     expect(m.severity).toBe("cancelled");
-    expect(m.grahavani.steps.join(" | ")).toMatch(/Mars is yogakaraka for Simha Lagna .* → −1 .*Formed but cancelled/);
+    expect(m.grahavani.steps.join(" | ")).toMatch(/Mars yogakaraka \(Karka\/Simha Lagna exemption\) → −1 .*Formed but cancelled/);
     expect(manglikCard(c, c.vimshottari.current.as_of)).toMatchObject({ status: "cancelled", statusLabel: "Formed but cancelled" });
   });
 });

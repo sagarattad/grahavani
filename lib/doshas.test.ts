@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildDoshas, dhaiyaCard, kaalSarpCard, kemadrumaCard, manglikCard, sadeSatiCard } from "./doshas";
 import { manglikSchema } from "./kundlit-schemas";
-import { loadKaalSarpFixtures, loadKundliFixtures, rawFixture } from "../tests/fixtures";
+import { loadKaalSarpFixtures, loadKundliFixtures, loadManglikFixtures, rawFixture } from "../tests/fixtures";
 
 const fx = loadKundliFixtures();
 const chartOf = (part: string) => fx.find((f) => f.file.includes(part))!.chart;
@@ -57,12 +57,23 @@ describe("doshas", () => {
     for (const k of ["manglik", "sadeSati", "dhaiya"]) expect(cards.find((c) => c.key === k)!.status, k).not.toBe("unavailable");
   });
 
+  it("Manglik card: one line with Kundlit's own rating, only when Kundlit's result is given", () => {
+    const [kundlit] = loadManglikFixtures();
+    const withLine = buildDoshas({ chart: raipur, kundlitManglik: kundlit, asOf }).find((c) => c.key === "manglik")!;
+    const lines = withLine.details.filter((d) => d.startsWith("Kundlit's own rating:"));
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatch(kundlit.manglik ? /^Kundlit's own rating: Manglik, \w+/ : /^Kundlit's own rating: not Manglik/);
+    expect(manglikCard(raipur, asOf).details.join()).not.toContain("Kundlit's own rating");
+  });
+
   it("Manglik card: Grahavani's houses, cancellations, reasoning and Mangal periods", () => {
     const c = manglikCard(raipur, asOf);
-    expect(c.statusLabel).toBe("Present — Medium");
+    expect(c.statusLabel).toBe("Present — Low"); // 1 (Lagna) + 0.75 (Moon) − 1 = 0.75
     expect(c.details[0]).toBe("From Lagna: Mars in the 7th — yes (North Indian set 1, 4, 7, 8, 12)");
     expect(c.details.join()).toMatch(/Cancellation: Mars in its own or exaltation sign \(tradition-dependent\)/);
-    expect(c.details.join()).toMatch(/Intensity: .*Total \+1 − 0?\.?\d* ?.*= 1 → Medium|Intensity: .*= 1 → Medium/);
+    expect(c.details.join()).toContain("Intensity: From Lagna");
+    expect(c.details.join()).toContain("Total +1 + 0.75 − 1 = 0.75 → Low");
+    expect(c.details.join()).toMatch(/Weights \(tradition-dependent\)/);
     for (const w of c.windows) expect(w.ad ?? w.md).toBe("Mars");
   });
 });

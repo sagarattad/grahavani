@@ -55,17 +55,17 @@ describe("PDF rendering", () => {
   }, 30_000);
 
   it("keeps minus signs: the Manglik total reads with every term signed", async () => {
-    // Raipur: Mars counts from the Lagna and the Moon, with one cancellation.
+    // Raipur: Mars counts from the Lagna (1) and the Moon (0.75), with one cancellation.
     const raipur = loadKundliFixtures().find((f) => f.file.includes("raipur"))!;
     const total = computeManglik(raipur.chart).grahavani.steps.at(-1)!;
-    expect(total).toMatch(/^Total \+1 \+ 1 − 1 = 1 → Medium/);
+    expect(total).toMatch(/^Total \+1 \+ 0\.75 − 1 = 0\.75 → Low/);
     const buf = await renderPdf({
       kind: "kundli",
       data: { person: person("Test Person"), chart: raipur.chart, dasha: raipur.chart.vimshottari.current, doshas: doshasFor(raipur.chart, null), attribution: raipur.attribution, reading: null },
     });
     const { text } = await extractText(new Uint8Array(buf), { mergePages: true });
     const flat = text.replace(/\s+/g, " ");
-    expect(flat).toContain("Total +1 + 1 − 1 = 1, so Medium (<= 0 cancelled");
+    expect(flat).toContain("Total +1 + 0.75 − 1 = 0.75, so Low (<= 0 cancelled");
     expect(flat).toContain(latin(total).replace(/\s+/g, " "));
   }, 30_000);
 

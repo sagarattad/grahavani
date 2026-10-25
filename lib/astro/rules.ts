@@ -5,6 +5,8 @@
 import type { Chart, Graha } from "../kundlit-schemas";
 import { EXALTATION_SIGN, SEVEN, SIGN_LORD, debilitationSign, isPlanet, signDistance, type Planet } from "./relations";
 import { houseLords } from "./functional";
+import { dignityOf } from "./relations";
+import { tempSigns } from "./varga";
 
 const KENDRA = [1, 4, 7, 10];
 const TRIKONA = [1, 5, 9];
@@ -37,6 +39,8 @@ export type NeechaBhanga = {
   byPlanet: { planet: string; rules: number }[];
   /** "3 conditions from 2 planets (Mercury meets 2)". */
   countText: string;
+  /** Planets giving cancellations that are not tradition-dependent (the D9 rule counts under the planet itself). */
+  independent: string[];
   /** Neecha Bhanga Raja Yoga: full when the planet also sits in a kendra / trikona from the Lagna and is not combust. */
   raja: { state: "full" | "partial" | "not formed"; why: string };
 };
@@ -51,7 +55,8 @@ export type NeechaBhanga = {
  * 5. the planet whose exaltation sign is the debilitation sign: conjunct the
  *    planet, or in a kendra;
  * 6. the planet exalted in the D9;
- * 7. (tradition-dependent) the debilitated planet itself in a kendra.
+ * 7. (tradition-dependent) the debilitated planet itself in a kendra;
+ * 8. (tradition-dependent) the planet exchanging signs with its dispositor.
  * Neecha Bhanga Raja Yoga is partial when the planet is outside a kendra /
  * trikona, combust, or debilitated again in the D9.
  */
@@ -65,6 +70,7 @@ export function neechaBhanga(chart: Chart): NeechaBhanga[] {
       const rules: string[] = [];
       const cancelling = new Set<string>();
       const counts = new Map<string, number>();
+      const independent = new Set<string>();
       const dispName = SIGN_LORD[g.sign_num];
       const exLordName = SIGN_LORD[EXALTATION_SIGN[p]];
       const disp = byName(chart, dispName);
@@ -75,6 +81,7 @@ export function neechaBhanga(chart: Chart): NeechaBhanga[] {
         rules.push(text);
         for (const n of by) cancelling.add(n);
         for (const n of by.length ? by : [p]) counts.set(n, (counts.get(n) ?? 0) + 1);
+        if (!text.includes("tradition-dependent")) for (const n of by.length ? by : [p]) independent.add(n);
       };
 
       const d = kendraFrom(disp);
@@ -90,30 +97,28 @@ export function neechaBhanga(chart: Chart): NeechaBhanga[] {
         fire(`${exaltedHere.name}, whose exaltation sign is ${p}'s debilitation sign, is in a kendra from the ${kendraFrom(exaltedHere)}`, exaltedHere.name);
       if (g.navamsha.sign_num === EXALTATION_SIGN[p]) fire(`${p} is exalted in the D9`);
       if (kendraFrom(g)) fire(`${p} itself is in a kendra from the ${kendraFrom(g)} (tradition-dependent)`);
+      if (dispName !== p && SIGN_LORD[disp.sign_num] === p) fire(`${p} exchanges signs with its dispositor ${dispName} (tradition-dependent)`, dispName);
 
       const state: RuleState = rules.length ? "formed" : "not formed";
       const goodHouse = KENDRA.includes(g.house) || TRIKONA.includes(g.house);
-      const d9Debilitated = g.navamsha.sign_num === debilitationSign(p);
+      // The D9 must also hold up: neutral or better (enemy, great enemy or debilitated → partial).
+      const d9 = dignityOf(p, g.navamsha.sign_num, tempSigns(chart, "d9"));
+      const d9Weak = ["debilitated", "great enemy", "enemy"].includes(d9.label);
+      const d9Why = d9.label === "debilitated" ? `${p} is debilitated again in the D9` : `${p} is in a ${d9.label}'s sign in the D9 (${g.navamsha.sign})`;
       const raja: NeechaBhanga["raja"] = !rules.length
         ? { state: "not formed", why: "the debility is not cancelled" }
-        : goodHouse && !g.combust && !d9Debilitated
-          ? { state: "full", why: `${p} is in Bhava ${g.house} (kendra / trikona), not combust, and not debilitated in the D9` }
+        : goodHouse && !g.combust && !d9Weak
+          ? { state: "full", why: `${p} is in Bhava ${g.house} (kendra / trikona), not combust, and neutral or better in the D9` }
           : {
               state: "partial",
-              why: [
-                !goodHouse && `${p} is in Bhava ${g.house}, not a kendra or trikona`,
-                g.combust && `${p} is combust`,
-                d9Debilitated && `${p} is debilitated again in the D9`,
-              ]
-                .filter(Boolean)
-                .join("; "),
+              why: [!goodHouse && `${p} is in Bhava ${g.house}, not a kendra or trikona`, g.combust && `${p} is combust`, d9Weak && d9Why].filter(Boolean).join("; "),
             };
       const byPlanet = [...counts].map(([planet, n]) => ({ planet, rules: n }));
       const WORDS = ["", "one", "two", "three", "four", "five", "six"];
       const multi = byPlanet.filter((x) => x.rules > 1).map((x) => `${x.planet} meets ${WORDS[x.rules] ?? x.rules} of them`);
       const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
       const countText = `${plural(rules.length, "condition")} from ${plural(byPlanet.length, "planet")}${multi.length ? `; ${multi.join("; ")}` : ""}`;
-      return { planet: p, state, rules, cancelling: [...cancelling], byPlanet, countText, raja };
+      return { planet: p, state, rules, cancelling: [...cancelling], byPlanet, countText, independent: [...independent].filter((x) => x !== p), raja };
     });
 }
 
@@ -197,6 +202,28 @@ export function dhana(chart: Chart): Link[] {
     }
   }
   return links;
+}
+
+export type Exchange = { a: Planet; b: Planet; houses: [number, number]; kind: "Maha" | "Khala" | "Dainya" };
+
+/**
+ * Sign exchanges (parivartana): A sits in a sign of B and B in a sign of A.
+ * Kind by the two houses involved: Dainya when one is the 6th, 8th or 12th,
+ * else Khala when one is the 3rd, else Maha.
+ */
+export function exchanges(chart: Chart): Exchange[] {
+  const out: Exchange[] = [];
+  for (let i = 0; i < SEVEN.length; i++) {
+    for (let j = i + 1; j < SEVEN.length; j++) {
+      const A = byName(chart, SEVEN[i]);
+      const B = byName(chart, SEVEN[j]);
+      if (SIGN_LORD[A.sign_num] !== B.name || SIGN_LORD[B.sign_num] !== A.name) continue;
+      const houses: [number, number] = [A.house, B.house];
+      const kind = houses.some((h) => [6, 8, 12].includes(h)) ? "Dainya" : houses.includes(3) ? "Khala" : "Maha";
+      out.push({ a: SEVEN[i], b: SEVEN[j], houses, kind });
+    }
+  }
+  return out;
 }
 
 /** Budhaditya: the Sun and Mercury in the same sign. */

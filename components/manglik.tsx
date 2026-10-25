@@ -1,3 +1,4 @@
+import { MANGLIK_WEIGHTS_NOTE } from "@/lib/astro/manglik";
 import { Chip } from "./ui";
 import { ord } from "@/lib/astro/rules";
 import type { ManglikResult } from "@/lib/astro/manglik";
@@ -58,6 +59,7 @@ export function ManglikDetails({ m }: { m: ManglikResult }) {
               <li key={s}>{s}</li>
             ))}
           </ul>
+          <p className="mt-1 text-xs text-muted">{MANGLIK_WEIGHTS_NOTE}</p>
         </>
       )}
     </>

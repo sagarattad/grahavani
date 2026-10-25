@@ -100,9 +100,10 @@ describe.skipIf(!present)("regression: case A (local-only fixture)", () => {
       ["Moon", 6, false, false],
       ["Venus", 2, false, true],
     ]);
-    expect(m.grahavani.cancellations.find((c) => c.text.startsWith("Mars is yogakaraka"))!.applies).toBe(true);
-    expect(m.severity).toBe("low");
-    expect(m.grahavani.steps.join(" | ")).toMatch(/Mars is yogakaraka for Karka Lagna .* → −1/);
+    expect(m.grahavani.cancellations.find((c) => c.text === "Mars yogakaraka (Karka/Simha Lagna exemption)")!.applies).toBe(true);
+    // Weights: Lagna 1 + South-Indian 2nd 0.25 − 1 − 0.25 = 0 (formed but cancelled).
+    expect(m.severity).toBe("cancelled");
+    expect(m.grahavani.steps.join(" | ")).toMatch(/Mars yogakaraka \(Karka\/Simha Lagna exemption\) → −1/);
   });
 
   it("marriage: D9 7th Meena, lord Jupiter (Vargottama); Venus in D9 Kumbha; Darakaraka Venus; Upapada Kanya", () => {
@@ -250,7 +251,7 @@ describe.skipIf(!present)("regression: case A (local-only fixture)", () => {
       expect(Object.fromEntries(Object.keys(r2.yogas).map((k) => [k, by(k)?.rating.level]))).toEqual(r2.yogas);
       expect(by("vesi")!.rating.reasons.join()).toMatch(/average \d(\.\d+)?, rounded down/);
       expect(Boolean(by("dhana"))).toBe(r2.dhana_formed);
-      expect(sharedLinks(ys)).toEqual([r2.shared_link]);
+      expect(sharedLinks(ys).find((l) => l.planets.join() === r2.shared_link.planets.slice().sort().join())!.yogas).toEqual(r2.shared_link.yogas);
     });
 
     it("Venus D1 → D9 change", () => {

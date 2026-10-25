@@ -129,6 +129,36 @@ const REMEDY_RE = /\b(remed\w*|puja|pooja|mantras?|gemstones?|gems?|yantras?|don
 // Awkward rating constructions and references to the chart's own notes (About prompt rules).
 const ABOUT_WORDING_RE = /\bintensity is:?\s+(?:high|medium|low|cancelled)\b|\bits intensity:?\s+\w+,?\s+because\b|\bthe chart['’]s own notes?\b|\bwhat the chart (?:names|calls)\b|\bthe chart names\b/i;
 
+// "2nd and 11th", "2nd–5th", "9th and the 11th lords": a pair of houses named together.
+const HOUSE_PAIR_RE = /\b(\d{1,2})(?:st|nd|rd|th)\b(?:\s+(?:house|bhava|lord)s?)?\s*(?:and|&|–|-|with|to)\s*(?:the\s+)?(\d{1,2})(?:st|nd|rd|th)\b/gi;
+/** House numbers in one computed combination: "lord of 2nd and 7th", "lord of [6, 9]", "Bhava 5". */
+const housesIn = (claim: string) =>
+  new Set([
+    ...[...claim.matchAll(/\b(\d{1,2})(?:st|nd|rd|th)\b/g)].map((m) => Number(m[1])),
+    ...[...claim.matchAll(/\[([\d,\s]+)\]/g)].flatMap((m) => m[1].split(",").map(Number)),
+    ...[...claim.matchAll(/\bBhava (\d{1,2})\b/g)].map((m) => Number(m[1])),
+  ]);
+
+/**
+ * House pairs named in a Yoga's About text must be linked in one of its
+ * computed combinations (e.g. Dhana from the 2nd–5th and 9th–11th lords must
+ * not be described as "the 2nd and 11th").
+ */
+function checkAboutHouses(output: { items: { key: string; about: string }[] }, items: AboutItem[]): string[] {
+  const problems: string[] = [];
+  for (const i of output.items) {
+    const item = items.find((x) => x.key === i.key);
+    if (!item || item.kind !== "yoga") continue;
+    const combos = item.details.map(housesIn).filter((s) => s.size);
+    if (!combos.length) continue;
+    for (const m of i.about.matchAll(HOUSE_PAIR_RE)) {
+      const [a, b] = [Number(m[1]), Number(m[2])];
+      if (!combos.some((s) => s.has(a) && s.has(b))) problems.push(`"${i.key}": "${m[0]}" are not linked in this Yoga (its links: ${item.details.join("; ")})`);
+    }
+  }
+  return problems;
+}
+
 /** Each About text may state only its own item's rating, in the fixed form. */
 function checkAboutRatings(output: { items: { key: string; about: string }[] }, items: AboutItem[]): string[] {
   const problems: string[] = [];
@@ -163,6 +193,7 @@ export function validateAbout(
     if (w) problems.push(`"${i.key}": "${w[0]}": state the rating as its own sentence ("it is of Low intensity", "it is cancelled") and do not refer to the chart's notes`);
   }
   problems.push(...checkAboutRatings(output, items));
+  problems.push(...checkAboutHouses(output, items));
   problems.push(...validateReading(output, ctx));
   return problems;
 }

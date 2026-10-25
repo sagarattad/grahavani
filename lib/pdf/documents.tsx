@@ -524,7 +524,9 @@ function PdfMarriageCareer({ chart, asOf }: { chart: Chart; asOf: string }) {
           ["D1 7th lord", `${grahaWithMeaning(m.d1.seventhLord)} in Bhava ${m.d1.lordHouse} (${m.d1.lordStrength})`],
           ["Venus (D1)", `${m.d1.venusDignity} (${m.d1.venusStrength})`],
           ["D9 Lagna", rashi(m.d9.lagnaSign)],
-          ["D9 7th and its lord", `${rashi(m.d9.seventhSign)}, lord ${graha(m.d9.seventhLord)} in D9 ${rashi(m.d9.lordD9Sign)}: ${dignityText(m.d9.lordD9Dignity)}${m.d9.lordVargottama ? ", Vargottama" : ""}`],
+          ...(m.d9.suppressed
+            ? []
+            : ([["D9 7th and its lord", `${rashi(m.d9.seventhSign)}, lord ${graha(m.d9.seventhLord)} in D9 ${rashi(m.d9.lordD9Sign)}: ${dignityText(m.d9.lordD9Dignity)}${m.d9.lordVargottama ? ", Vargottama" : ""}`]] as [string, string][])),
           ["Venus (D9)", `${rashi(m.d9.venusD9Sign)}: ${dignityText(m.d9.venusD9Dignity)}`],
           ["Darakaraka", `${grahaWithMeaning(m.darakaraka.planet)} (${m.darakaraka.scheme})`],
           ["Upapada Lagna", `${rashi(m.upapada.sign)} (lord ${graha(m.upapada.lord)})`],
@@ -539,7 +541,7 @@ function PdfMarriageCareer({ chart, asOf }: { chart: Chart; asOf: string }) {
                     ]
                   : []),
                 ["D10 Lagna", rashi(d10.lagnaSign)],
-                ["D10 10th and its lord", `${rashi(d10.tenthSign)}, lord ${graha(d10.tenthLord)}`],
+                ...(bt?.uninterpretable.d10 ? [] : ([["D10 10th and its lord", `${rashi(d10.tenthSign)}, lord ${graha(d10.tenthLord)}`]] as [string, string][])),
                 ["Key planets in D10", d10.planets.map((p) => `${graha(p.name)} ${rashi(p.sign)} (${p.dignity})`).join("; ")],
               ] as [string, string][])
             : []),

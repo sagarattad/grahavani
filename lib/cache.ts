@@ -135,21 +135,24 @@ export async function completedChartRow(row: BirthChart): Promise<{ row: BirthCh
   }
 }
 
-export type DoshaData = { chart: Chart; manglik: ManglikComputed; kaalSarp: KaalSarp | null };
+/** `kundlitManglik`: Kundlit's own Manglik result, shown beside Grahavani's as one reference line (null when unavailable). */
+export type DoshaData = { chart: Chart; manglik: ManglikComputed; kaalSarp: KaalSarp | null; kundlitManglik: Manglik | null };
 
 /**
  * Everything the Doshas section needs, fetched in parallel. A failed call
  * (e.g. Kundlit busy) becomes null so the page shows "Not available" instead
  * of failing. Manglik is Grahavani's own (lib/astro/manglik.ts), computed from
- * the chart, so it needs no Kundlit call.
+ * the chart; Kundlit's own Manglik result is fetched once per chart (cached in
+ * manglik_results) only for its one-line reference rating.
  */
 export async function loadDoshaData(row: BirthChart): Promise<DoshaData> {
-  const [k, t] = await Promise.allSettled([getOrCreateKaalSarp(row), ensureChartComplete(row)]);
-  for (const r of [k, t]) if (r.status === "rejected") console.warn("dosha_data_unavailable", (r.reason as Error)?.message);
+  const [k, t, m] = await Promise.allSettled([getOrCreateKaalSarp(row), ensureChartComplete(row), getOrCreateManglik(row)]);
+  for (const r of [k, t, m]) if (r.status === "rejected") console.warn("dosha_data_unavailable", (r.reason as Error)?.message);
   const chart = t.status === "fulfilled" ? t.value : chartOf(row);
   return {
     manglik: computeManglik(chart),
     kaalSarp: k.status === "fulfilled" ? kaalSarpOf(k.value) : null,
+    kundlitManglik: m.status === "fulfilled" ? manglikOf(m.value) : null,
     chart,
   };
 }

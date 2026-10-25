@@ -178,13 +178,13 @@ describe("Manglik validation", () => {
 });
 
 describe("ratings in fixed phrases", () => {
-  // Raipur: Raj Yoga rated Moderate, Dhana Yoga Weak, Manglik Dosha of Medium intensity.
+  // Raipur: Raj Yoga rated Moderate, Dhana Yoga Weak, Manglik Dosha of Low intensity.
   const check = (text: string) => validateReading({ yogas: text }, kundliCtx);
 
   it("facts carry the fixed rating phrase", () => {
     const raj = (facts.yogas_present as { yoga: string; rating: string }[]).find((y) => y.yoga === "Raj Yoga")!;
     expect(raj.rating).toBe("rated Moderate");
-    expect(JSON.stringify(facts.doshas)).toMatch(/"rating":"Medium intensity"/);
+    expect(JSON.stringify(facts.doshas)).toMatch(/"rating":"Low intensity"/);
     expect(JSON.stringify(facts.grahas)).toMatch(/"avastha":"Bala \(minor factor\)"/);
   });
 
@@ -194,8 +194,8 @@ describe("ratings in fixed phrases", () => {
   });
 
   it("a dosha's intensity must match FACTS", () => {
-    expect(check("Manglik Dosha, of Medium intensity, has one cancellation.")).toEqual([]);
-    expect(check("Manglik Dosha is of High intensity.").join()).toMatch(/computed Medium intensity/);
+    expect(check("Manglik Dosha, of Low intensity, has one cancellation.")).toEqual([]);
+    expect(check("Manglik Dosha is of High intensity.").join()).toMatch(/computed Low intensity/);
     // The old colon form is rejected in every construction (rule R1).
     for (const t of ["Manglik Dosha, intensity: Medium.", "Manglik Dosha carries intensity: Medium.", "Manglik Dosha has intensity: Medium.", "Its intensity is: Medium."])
       expect(check(t).join(), t).toMatch(/write "Medium intensity"/);
@@ -220,17 +220,17 @@ describe("ratings in fixed phrases", () => {
   it("several items in one sentence: each phrase follows its own item's name", () => {
     expect(check("Raj Yoga is rated Moderate, while Vasi is rated Weak.")).toEqual([]);
     expect(check("Raj Yoga is rated Moderate, while Ruchaka is rated Strong.").join()).toMatch(/Ruchaka: text says "rated Strong"/);
-    expect(check("Manglik Dosha is of Medium intensity and Raj Yoga is rated Moderate.")).toEqual([]);
+    expect(check("Manglik Dosha is of Low intensity and Raj Yoga is rated Moderate.")).toEqual([]);
     // The phrase's own clause names one item (a live failure).
-    expect(check("Ruchaka has Bhanga cancellation, Manglik Dosha remains of Medium intensity.")).toEqual([]);
-    expect(check("Ruchaka has Bhanga cancellation, Manglik Dosha remains of High intensity.").join()).toMatch(/computed Medium intensity/);
+    expect(check("Ruchaka has Bhanga cancellation, Manglik Dosha remains of Low intensity.")).toEqual([]);
+    expect(check("Ruchaka has Bhanga cancellation, Manglik Dosha remains of High intensity.").join()).toMatch(/computed Low intensity/);
   });
 
   it("a rating can refer back to the item named just before (the live failures)", () => {
-    expect(check("Manglik Dosha is present. It is of Medium intensity.")).toEqual([]);
-    expect(check("Manglik Dosha is present; Medium intensity.")).toEqual([]);
+    expect(check("Manglik Dosha is present. It is of Low intensity.")).toEqual([]);
+    expect(check("Manglik Dosha is present; Low intensity.")).toEqual([]);
     expect(check("Raj Yoga links the 1st and 5th lords. It is rated Moderate because of combustion.")).toEqual([]);
-    expect(check("Manglik Dosha is present. It is of High intensity.").join()).toMatch(/computed Medium intensity/);
+    expect(check("Manglik Dosha is present. It is of High intensity.").join()).toMatch(/computed Low intensity/);
   });
 
   it("hyphen and space spellings are the same name", () => {
